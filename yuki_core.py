@@ -6,6 +6,7 @@ from config import (
 )
 import json
 import os
+import os
 from openai import OpenAI
 
 # 基础性格设置

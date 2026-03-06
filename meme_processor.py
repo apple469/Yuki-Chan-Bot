@@ -10,7 +10,8 @@ import json
 import hashlib
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
-from config import SILICONFLOW_API_KEY, SILICONFLOW_API_URL, CACHE_DIR, CACHE_FILE, MAX_CONCURRENT_MEME, DEBUG, REQUEST_TIMEOUT
+from config import SILICONFLOW_API_KEY, SILICONFLOW_API_URL, CACHE_DIR, CACHE_FILE, MAX_CONCURRENT_MEME, DEBUG, \
+    REQUEST_TIMEOUT
 
 
 def log(msg):
@@ -23,22 +24,43 @@ class MemeCache:
         self.cache = {}
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR)
+        self._load_cache()
+
+    def _load_cache(self):
+        """从文件加载缓存到内存"""
+        # 使用 print 强制输出，不受 DEBUG 控制
+        print(f"【缓存调试】重新加载缓存文件: {CACHE_FILE}")
         if os.path.exists(CACHE_FILE):
             try:
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    self.cache = json.load(f)
-            except:
+                    new_cache = json.load(f)
+                # 检查是否有变化
+                if new_cache != self.cache:
+                    print(f"【缓存调试】缓存已更新，原有 {len(self.cache)} 条，现在 {len(new_cache)} 条")
+                    self.cache = new_cache
+                else:
+                    print(f"【缓存调试】缓存无变化，仍为 {len(self.cache)} 条")
+            except Exception as e:
+                print(f"【缓存调试】加载缓存失败: {e}")
                 self.cache = {}
+        else:
+            print(f"【缓存调试】缓存文件不存在")
+            self.cache = {}
 
     def save(self):
         try:
             with open(CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
+            print(f"【缓存调试】缓存已保存到 {CACHE_FILE}")
         except Exception as e:
-            log(f"保存缓存失败: {e}")
+            print(f"【缓存调试】保存缓存失败: {e}")
 
     def get(self, key):
-        return self.cache.get(key)
+        # 每次获取前重新加载文件，确保手动修改生效
+        self._load_cache()
+        value = self.cache.get(key)
+        print(f"【缓存调试】获取 key: {key[:50]}... = {value}")
+        return value
 
     def set(self, key, value):
         self.cache[key] = value
@@ -47,7 +69,7 @@ class MemeCache:
         self.cache = {}
         if os.path.exists(CACHE_FILE):
             os.remove(CACHE_FILE)
-        log("缓存已清空")
+        print("【缓存调试】缓存已清空")
 
 
 class MemeProcessor:
@@ -129,52 +151,64 @@ class MemeProcessor:
                     )
 
     async def understand_from_url(self, img_url):
+        # 强制重新加载缓存文件
         img_url = img_url.replace("&amp;", "&")
         cache_key = f"url:{img_url}"
+
+        # 使用 print 强制输出调试信息
+        print(f"【URL调试】完整URL: {img_url}")
+        print(f"【URL调试】缓存key: {cache_key}")
+
         cached = self.cache.get(cache_key)
         if cached:
-            log(f"使用缓存: {cached}")
+            print(f"【URL调试】命中URL缓存: {cached}")
             return f"[动画表情:{cached}]"
 
         try:
-            log(f"开始下载 {img_url}")
+            print(f"【下载调试】开始下载图片")
             async with aiohttp.ClientSession() as session:
                 async with session.get(img_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                     if resp.status != 200:
-                        log(f"下载失败，HTTP {resp.status}")
+                        print(f"【下载调试】下载失败，HTTP {resp.status}")
                         return "[动画表情]"
                     content = await resp.read()
                     if len(content) > 10 * 1024 * 1024:
-                        log("图片超过10MB，跳过")
+                        print("【下载调试】图片超过10MB，跳过")
                         return "[动画表情]"
 
             img_hash = self.get_image_hash(content)
+            print(f"【哈希调试】图片哈希 = {img_hash}")
+
+            # 检查哈希缓存
             cached = self.cache.get(img_hash)
             if cached:
-                log(f"使用图片哈希缓存: {cached}")
+                print(f"【哈希调试】命中哈希缓存: {cached}")
                 return f"[动画表情:{cached}]"
 
-            log("开始压缩...")
+            print("【处理调试】开始压缩...")
             b64_data = self.compress_image(content)
             if not b64_data:
                 return "[动画表情]"
 
-            log("发送AI请求...")
+            print("【API调试】发送AI请求...")
             async with self.semaphore:
                 analysis = await self.call_api(b64_data)
 
-            log(f"识别结果: {analysis}")
+            print(f"【API调试】识别结果: {analysis}")
             clean_analysis = analysis.strip().replace('\n', ' ').replace('\r', '')
 
+            # 保存到缓存
             self.cache.set(img_hash, clean_analysis)
             self.cache.set(cache_key, clean_analysis)
             self.cache.save()
+            print(f"【缓存调试】已保存新结果: {clean_analysis}")
 
             return f"[动画表情:{clean_analysis}]"
 
         except Exception as e:
-            log(f"理解表情失败: {e}")
+            print(f"【错误调试】理解表情失败: {e}")
             return "[动画表情]"
+
 
     def extract_urls_from_text(self, text):
         pattern = r'\[CQ:image,.*?url=([^,\]]+).*?\]'

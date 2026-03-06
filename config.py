@@ -17,10 +17,10 @@ TARGET_QQ = 3580583831
 TARGET_GROUP = 1085409165
 
 # ================= 文件配置 =================
-HISTORY_FILE = "chat_log/chat_history.json"
-LOG_FILE = "chat_log/yuki_chat_all_nekonochi.log"
+HISTORY_FILE = "chat_history.json"
+LOG_FILE = "yuki_chat_all_nekonochi.log"
 CACHE_DIR = "meme_cache"
-CACHE_FILE = "meme_cache/meme_cache.json"
+CACHE_FILE = "meme_cache.json"
 
 # ================= 时间配置 =================
 DEBOUNCE_TIME = 1

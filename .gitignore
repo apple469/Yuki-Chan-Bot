@@ -4,3 +4,9 @@ Legacy/
 meme_cache/
 chat_log/
 .env
+chat_history.json
+yuki_chat_all_nekonochi.log
+chat_history.json
+meme_cache.json
+.vscode/
+__pycache__/
