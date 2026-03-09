@@ -82,7 +82,7 @@ async def should_i_reply(history, current_text):
             f"如果要发言，请回答'YES'。如果想继续潜水观察，请回答'NO'。"
         )
 
-        messages = (system_context +
+        messages = ([{"role": "system", "content": f"{yuki.get_setting('group')}"}] +
                     [{"role": "system", "content": f"最近对话：\n{dialogue_text}"}] +
                     [{"role": "user", "content": check_prompt}])
 
@@ -175,7 +175,12 @@ async def process_messages(chat_id, websocket, mode):
         # 如果 query 为空（比如全是系统消息），则 fallback 到当前消息
         if not query.strip():
             query = combined_text
-        relevant_diaries = memory_rag.search_memory(query, chat_id=cid, threshold = 0.4)
+        relevant_diaries = memory_rag.search_memory(
+            query, 
+            chat_id = cid,
+            top_k = RETRIEVAL_TOP_K, 
+            threshold = DIARY_THRESHOLD
+        )
         # ---------- 新增调试打印 ----------
         print(f"🔍 检索到 {len(relevant_diaries)} 条相关日记:")
         for i, diary in enumerate(relevant_diaries, 1):
@@ -199,7 +204,7 @@ async def process_messages(chat_id, websocket, mode):
         # 3. 加入最近KEEP_LAST_DIALOGUE条对话（不包括系统消息）
         recent_msgs = [msg for msg in history_dict[cid][-KEEP_LAST_DIALOGUE-1:-1] if msg["role"] != "system"]
         combined_API_message.extend(recent_msgs)
-        combined_API_message.append({"role": "user", "content": combined_text})
+        combined_API_message.append({"role": "user", "content": f" (当前时间:{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}){combined_text}"})
 
         # 4. 确保最后一条是当前用户消息（如果最近对话中已有，则不重复）
         # if not recent_msgs or recent_msgs[-1]["role"] != "user" or recent_msgs[-1]["content"] != combined_text:
@@ -295,7 +300,7 @@ async def main_logic(mode):
                     if not TARGET_GROUPS or group_id in TARGET_GROUPS:
                         sender = data.get("sender", {})
                         sender_name = sender.get("card") or sender.get("nickname") or "未知路人"
-                        manage_buffer(group_id, f"{sender_name}说: {data.get('raw_message')}", websocket, "group")
+                        manage_buffer(group_id, f"【“{sender_name}”】说: {data.get('raw_message')}", websocket, "group")
                 # elif mode == "group" and msg_type == "group" and data.get("group_id") == TARGET_GROUP:
                 #     sender = data.get("sender", {})
                 #     # 优先使用群名片，若没有则用个人昵称

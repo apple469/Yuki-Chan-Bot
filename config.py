@@ -12,11 +12,11 @@ VECTOR_DB_PATH = "./yuki_memory"          # 向量数据库路径
 EMBED_MODEL = "shibing624/text2vec-base-chinese"  # 中文嵌入模型
 RETRIEVAL_TOP_K = 20                        # 每次检索返回日记条数
 KEEP_LAST_DIALOGUE = 5                     # 保留最近对话条数（短期记忆）
-
+DIARY_THRESHOLD = 0.26                   # 日记相关性阈值（越低越严格）
 # ================= API配置 =================
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY") # 填入自己的 API_KEY
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-SILICONFLOW_API_KEY = "sk-iasmjtktptrnmmhdxevwwlgyxdjfveixktnmkvhkcyrzocxr" # 填入自己的 API_KEY
+SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY") # 填入自己的 API_KEY
 SILICONFLOW_API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 
 # ================= 连接配置 =================
@@ -39,7 +39,7 @@ CACHE_FILE = "meme_cache.json"
 
 # ================= 时间配置 =================
 DEBOUNCE_TIME = 8
-DIARY_THRESHOLD = 50
+
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=10, sock_read=30)
 
 # ================= 精力值配置 =================

@@ -222,12 +222,12 @@ class MemeProcessor:
                     "content": [
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}},
                         {"type": "text",
-                         "text": "用词或短句描述这个表情包的核心意思，不超过10个字（如：送玫瑰，开心，害羞，难过，震惊，或者“趴在床上，无语，二次元角色”等）。如果是多文字图片，输出文字，可超过字数限制。长段文字直接输出“长段文字”"}
+                         "text": "用词或短句描述这个表情包的核心意思，不超过10个字。如果是多文字图片，输出文字，可超过字数限制。长段文字直接输出“长段文字”"}
                     ]
                 }
             ],
             "max_tokens": 50,
-            "temperature": 0.7
+            "temperature": 0.75
         }
         async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
             async with session.post(SILICONFLOW_API_URL, json=payload, headers=headers) as resp:
