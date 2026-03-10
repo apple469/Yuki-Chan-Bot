@@ -2,7 +2,6 @@
 import json
 import asyncio
 import websockets
-import message_utils
 import datetime
 import time
 import re
@@ -21,6 +20,8 @@ from config import (
     MESSAGE_TRUNCATE_SUFFIX, FILTER_LONG_MESSAGES
 )
 
+message_buffer = {}
+buffer_tasks = {}
 
 async def summarize_memory(chat_id, history):
     print(f"[System] [{chat_id}] 记忆有点长了，Yuki 正在写日记回顾...")
@@ -129,13 +130,12 @@ async def process_messages(chat_id, websocket, mode):
     messages = yuki.message_buffer.get(chat_id, [])
     if not messages: return
 
-    print(f"[System] 收到消息，准备处理... (chat_id={chat_id})")
-
     raw_combined_text = "\n".join(messages)
+    print(f"[{chat_id}] 收到消息 (原始): {raw_combined_text}")
     # 如果是群聊模式，传入 chat_id 作为群号
     group_id = chat_id if mode == "group" else None
     combined_text = await clean_cq_code(raw_combined_text, group_id)
-
+    print(f"[{chat_id}] 收到消息 (处理后) {combined_text}")
     yuki.message_buffer[chat_id] = []
     if chat_id in yuki.buffer_tasks: del yuki.buffer_tasks[chat_id]
 
@@ -312,27 +312,44 @@ async def main_logic(mode):
             await asyncio.sleep(3)
 
 def manage_buffer(chat_id, content, websocket, mode):
-    # 1. 预处理：调用工具函数进行截断（如果有需要）
-    if FILTER_LONG_MESSAGES:
-        content = message_utils.smart_truncate(content, MAX_MESSAGE_LENGTH, MESSAGE_TRUNCATE_SUFFIX)
+    global message_buffer, buffer_tasks
     
-    # 2. 状态维护：进入缓冲区
-    if chat_id not in yuki.message_buffer: 
-        yuki.message_buffer[chat_id] = []
+    # 超长消息处理
+    if len(content) > MAX_MESSAGE_LENGTH:
+        print(f"[System] 检测到超长消息 ({len(content)} 字符)，按顺序保留CQ码压缩文本")
+        
+        # 按顺序切分
+        parts = re.split(r'(\[CQ:.*?\])', content)
+        result = []
+        
+        for part in parts:
+            if not part:
+                continue
+            
+            # 是CQ码就原样保留
+            if part.startswith('[CQ:') and part.endswith(']'):
+                result.append(part)
+            else:
+                # 是文本就压缩（保留前后各一半）
+                if len(part) > 50:
+                    half = 25
+                    part = part[:half] + '……' + part[-half:]
+                result.append(part)
+        
+        content = ''.join(result)
+        print(f"[System] 压缩后长度: {len(content)} 字符")
+    
+    # 入队
+    if chat_id not in yuki.message_buffer: yuki.message_buffer[chat_id] = []
     yuki.message_buffer[chat_id].append(content)
-    
-    # 3. 异步调度：防抖逻辑
-    if chat_id in yuki.buffer_tasks: 
-        yuki.buffer_tasks[chat_id].cancel()
-    
-    yuki.buffer_tasks[chat_id] = asyncio.create_task(
-        process_messages(chat_id, websocket, mode)
-    )
+    if chat_id in yuki.buffer_tasks: yuki.buffer_tasks[chat_id].cancel()
+    yuki.buffer_tasks[chat_id] = asyncio.create_task(process_messages(chat_id, websocket, mode))
 
 if __name__ == "__main__":
     print("[System] Yuki 正在初始化...")
     start_time = time.time()
     # 初始化各模块
+
     message_processor = CQCodeParser(NAPCAT_WS_URL)
     meme_processor = MemeProcessor()
     yuki = YukiState(DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL)

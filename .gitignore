@@ -16,3 +16,6 @@ test_api.py
 test_memory.py
 manual_diary.py
 import_old_diaries.py
+manage_memory.py
+manual_memory.py
+models/

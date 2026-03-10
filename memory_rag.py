@@ -1,9 +1,14 @@
 # memory_rag.py
+import os
+# 必须在 import sentence_transformers 之前设置
+os.environ['TRANSFORMERS_OFFLINE'] = '1'
+os.environ['HF_DATASETS_OFFLINE'] = '1'
 import chromadb
 from sentence_transformers import SentenceTransformer
 import datetime
 import json
 from config import VECTOR_DB_PATH, EMBED_MODEL, RETRIEVAL_TOP_K
+
 
 class MemoryRAG:
     _instance = None

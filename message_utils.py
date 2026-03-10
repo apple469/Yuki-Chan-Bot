@@ -141,18 +141,22 @@ class MessageSender:
 
 def smart_truncate(content, max_len, suffix="..."):
     """
-    智能截断逻辑：保留CQ码完整性，仅截断长文本
+    保留原有调试好的逻辑：智能截断超长消息并保留CQ码完整性
     """
     import re
+    # 如果没超过长度，直接原样返回，不做任何处理
     if len(content) <= max_len:
         return content
-        
+
+    # --- 以下是你调试好的原始算法逻辑，完全不动 ---
+    print(f"[System] 检测到超长消息 ({len(content)} 字符)，进行智能截断")
     parts = re.split(r'(\[CQ:.*?\])', content)
     result = []
     total_len = 0
 
     for part in parts:
-        if not part: continue
+        if not part:
+            continue
         is_cq = part.startswith('[CQ:') and part.endswith(']')
         part_len = len(part)
 
@@ -171,4 +175,7 @@ def smart_truncate(content, max_len, suffix="..."):
                 if available > 0:
                     result.append(part[:available] + suffix)
                 break
-    return ''.join(result)
+
+    new_content = ''.join(result)
+    print(f"[System] 截断后长度: {len(new_content)} 字符")
+    return new_content
