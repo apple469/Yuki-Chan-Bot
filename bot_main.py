@@ -167,6 +167,7 @@ async def process_messages(chat_id, websocket, mode):
     if not messages: return
 
     combined_text = await clean_cq_code("\n".join(messages))
+    combined_text = combined_text.replace("\n", " ").strip()
 
     print(f"[{chat_id}] 收到消息{combined_text}")
     yuki.message_buffer[chat_id] = []
@@ -284,7 +285,7 @@ async def idle_diary_checker():
                 continue
             non_system_msgs = [msg for msg in history_dict[cid] if msg["role"] != "system"]
             non_system_count = len(non_system_msgs)
-            if non_system_count < DIARY_MIN_TURNS:
+            if non_system_count < DIARY_MIN_TURNS and idle_seconds < DIARY_IDLE_SECONDS * 1.5:  # 如果轮数不足但空闲时间已经是阈值的两倍，不输出
                 print(
                     f"[System] 群 {cid} 空闲 {idle_seconds:.1f} 秒，但对话轮数仅 {non_system_count}，继续观察..."
                     f"({datetime.datetime.now().strftime('%H:%M:%S')})"
