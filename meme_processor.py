@@ -30,18 +30,10 @@ class MemeCache:
 
     def _load_cache(self):
         """从文件加载缓存到内存"""
-        # 使用 print 强制输出，不受 DEBUG 控制
-        print(f"[MemeCache] 重新加载缓存文件: {CACHE_FILE}")
         if os.path.exists(CACHE_FILE):
             try:
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    new_cache = json.load(f)
-                # 检查是否有变化
-                if new_cache != self.cache:
-                    print(f"[MemeCache] 缓存已更新，原有 {len(self.cache)} 条，现在 {len(new_cache)} 条")
-                    self.cache = new_cache
-                else:
-                    print(f"[MemeCache] 缓存无变化，仍为 {len(self.cache)} 条")
+                    self.cache = json.load(f)
             except Exception as e:
                 print(f"[MemeCache] 加载缓存失败: {e}")
                 self.cache = {}
@@ -61,7 +53,7 @@ class MemeCache:
                 print(f"[MemeCache] 加载统计信息失败: {e}")
                 self.stats = {}
         else:
-            print(f"[MemeCache] 统计文件不存在，将创建新文件")
+            print(f"[MemeCache] 统计文件不存在")
             self.stats = {}
 
     def save_stats(self):
@@ -91,12 +83,9 @@ class MemeCache:
         # 如果命中缓存，增加统计次数
         if value is not None:
             self.stats[key] = self.stats.get(key, 0) + 1
-            print(f"[MemeCache] key {key[:30]}... 使用次数: {self.stats[key]}")
             # 每10次命中自动保存一次统计
             if self.stats[key] % 10 == 0:
                 self.save_stats()
-        
-        print(f"[MemeCache] 获取 key: {key[:50]}... = {value}")
         return value
 
     def set(self, key, value):
@@ -104,17 +93,7 @@ class MemeCache:
         # 新添加的缓存，初始化统计次数为0
         if key not in self.stats:
             self.stats[key] = 0
-            print(f"[MemeCache] 初始化统计: {key[:30]}... = 0")
-
-    def clear(self):
-        self.cache = {}
-        self.stats = {}  # 同时清空统计
-        if os.path.exists(CACHE_FILE):
-            os.remove(CACHE_FILE)
-        stats_file = CACHE_FILE.replace('.json', '_stats.json')
-        if os.path.exists(stats_file):
-            os.remove(stats_file)
-        print("[MemeCache] 缓存和统计已清空")
+            print(f"[MemeCache] 对当前信息初始化统计")
 
     def get_stats_report(self):
         """生成统计报告，按使用次数排序"""
@@ -255,46 +234,41 @@ class MemeProcessor:
         img_url = img_url.replace("&amp;", "&")
         cache_key = f"url:{img_url}"
 
-        # 使用 print 强制输出调试信息
-        print(f"[Meme Understanding] 完整URL: {img_url}")
-        print(f"[Meme Understanding] 缓存key: {cache_key}")
-
         cached = self.cache.get(cache_key)
         if cached:
-            print(f"[Meme Understanding] 命中URL缓存: {cached}")
+            print(f"[MemeCache] 命中URL缓存: {cached}")
             return f"[动画表情:{cached}]"
 
         try:
-            print(f"【下载调试】开始下载图片")
+            print(f"[Meme Understanding] 开始下载图片")
             async with aiohttp.ClientSession() as session:
                 async with session.get(img_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                     if resp.status != 200:
-                        print(f"【下载调试】下载失败，HTTP {resp.status}")
+                        print(f"[Meme Understanding] 下载失败，HTTP {resp.status}")
                         return "[动画表情]"
                     content = await resp.read()
                     if len(content) > 10 * 1024 * 1024:
-                        print("【下载调试】图片超过10MB，跳过")
+                        print("[Meme Understanding] 图片超过10MB，跳过")
                         return "[动画表情]"
 
             img_hash = self.get_image_hash(content)
-            print(f"【哈希调试】图片哈希 = {img_hash}")
 
             # 检查哈希缓存
             cached = self.cache.get(img_hash)
             if cached:
-                print(f"【哈希调试】命中哈希缓存: {cached}")
+                print(f"[MemeCache] 命中哈希缓存: {cached}")
                 return f"[动画表情:{cached}]"
 
-            print("【处理调试】开始压缩...")
+            print("[MemeCache] 开始压缩...")
             b64_data = self.compress_image(content)
             if not b64_data:
                 return "[动画表情]"
 
-            print("【API调试】发送AI请求...")
+            print("[Meme Understanding] 发送AI请求...")
             async with self.semaphore:
                 analysis = await self.call_api(b64_data)
 
-            print(f"【API调试】识别结果: {analysis}")
+            print(f"[Meme Understanding] 识别结果: {analysis}")
             clean_analysis = analysis.strip().replace('\n', ' ').replace('\r', '')
 
             # 保存到缓存
@@ -306,11 +280,17 @@ class MemeProcessor:
             return f"[动画表情:{clean_analysis}]"
 
         except Exception as e:
-            print(f"【错误调试】理解表情失败: {e}")
+            print(f"[Meme ERROR] 理解表情失败: {e}")
             return "[动画表情]"
 
 
     def extract_urls_from_text(self, text):
+        """提取文本中的图片URL，并返回替换后的文本和URL列表
+
+        例如输入: "这是一个表情[CQ:image,url=http://example.com/image.jpg]"
+
+        输出: ("这是一个表情[图片占位符]", ["http://example.com/image.jpg"])
+        """
         pattern = r'\[CQ:image,.*?url=([^,\]]+).*?\]'
 
         def replace_with_placeholder(match):

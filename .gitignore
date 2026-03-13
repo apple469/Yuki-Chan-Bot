@@ -12,10 +12,4 @@ meme_cache.json
 __pycache__/
 yuki_memory/
 meme_cache_stats.json
-test_api.py
-test_memory.py
-manual_diary.py
-import_old_diaries.py
-manage_memory.py
-manual_memory.py
 models/
