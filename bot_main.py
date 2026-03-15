@@ -165,6 +165,7 @@ async def process_messages(chat_id, websocket, mode):
     """处理缓冲中的消息，进行API交互和回复 """
     global real_time_debounce_time
     await asyncio.sleep(real_time_debounce_time)  # 防抖等待，合并短时间内的多条消息
+    real_time_debounce_time = DEBOUNCE_TIME  # 重置防抖时间，准备处理下一轮消息
     messages = yuki.message_buffer.get(chat_id, [])
     if not messages: return
 
@@ -206,28 +207,34 @@ async def process_messages(chat_id, websocket, mode):
         # 如果 query 为空（比如全是系统消息），则 fallback 到当前消息
         if not query.strip():
             query = combined_text
-        relevant_diaries = memory_rag.search_memory(
-            query, 
-            chat_id = cid,
-            top_k = RETRIEVAL_TOP_K, 
-            threshold = DIARY_THRESHOLD
-        )
+        # relevant_diaries = memory_rag.search_memory(
+        #     query, 
+        #     chat_id = cid,
+        #     top_k = RETRIEVAL_TOP_K, 
+        #     threshold = DIARY_THRESHOLD
+        # )
+# --- 检索记忆 ---
+        relevant_diaries = memory_rag.search_diaries(combined_text, chat_id=chat_id)
         print(f"[System] 检索到 {len(relevant_diaries)} 条相关日记:")
-        for i, diary in enumerate(reversed(relevant_diaries), 1): # 从最旧的相关日记开始打印预览
-            preview = diary[:50] + "..." if len(diary) > 100 else diary
+        
+        # 这里的 diary 现在是字典，我们要取出 ['content']
+        for i, diary_obj in enumerate(reversed(relevant_diaries), 1): 
+            content = diary_obj['content'] # 提取文本内容
+            # preview = content[:50] + "..." if len(content) > 100 else content
+            preview = content
             preview = preview.replace('\n', ' ')
             print(f"[Diary Debug]回忆 {i}: {preview}")
+
         # ----------------------- 构建API消息列表 ----------------------------
-        #
-        # 1. 基础人设（取历史第一个系统消息）
+        # 1. 基础人设
         system_prompt = history_dict[cid][0]["content"] if history_dict[cid] and history_dict[cid][0][
             "role"] == "system" else yuki.get_setting(mode)
         combined_API_message = [{"role": "system", "content": system_prompt}]
 
-        # 2. 插入检索到的日记作为系统消息
-        for diary in reversed(relevant_diaries):  # 从最旧的相关日记开始插入，保持时间顺序
-            combined_API_message.append({"role": "system", "content": f"【回忆】{diary}"})
-
+        # 2. 插入检索到的日记
+        for diary_obj in reversed(relevant_diaries):  
+            content = diary_obj['content'] # 提取文本内容
+            combined_API_message.append({"role": "system", "content": f"【回忆】{content}"})
         # 3. 加入最近KEEP_LAST_DIALOGUE条对话（不包括系统消息）
         recent_msgs = [msg for msg in history_dict[cid][-KEEP_LAST_DIALOGUE-1:-1] if msg["role"] != "system"]
         combined_API_message.extend(recent_msgs)
@@ -237,12 +244,13 @@ async def process_messages(chat_id, websocket, mode):
         print(f"[System] Yuki 正在打字...(剩余精力: {yuki.energy:.1f})")
         response = yuki.client.chat.completions.create(
             model="deepseek-chat",
+            # model = "grok-3-mini",
             messages=combined_API_message  # 使用新构建的消息列表
         )
         Yuki_Answer = response.choices[0].message.content
         Yuki_Answer = re.sub(r'\s*FINISHED\s*$', '', Yuki_Answer, flags=re.IGNORECASE)
 
-        real_time_debounce_time = DEBOUNCE_TIME  # 重置防抖时间，准备处理下一轮消息
+        # real_time_debounce_time = DEBOUNCE_TIME  # 重置防抖时间，准备处理下一轮消息
 
         history_manager.append_to_log(chat_id, "Yuki", Yuki_Answer)
         history_dict[cid].append({"role": "assistant", "content": Yuki_Answer})
@@ -394,11 +402,11 @@ async def manage_buffer(chat_id, content, websocket, mode, raw_message=''):
     if chat_id not in yuki.message_buffer: yuki.message_buffer[chat_id] = []
     yuki.message_buffer[chat_id].append(content)
     if "yuki" in content.lower():
-        real_time_debounce_time = 0.1  # 提升召唤消息的响应速度
+        real_time_debounce_time = 5  # 提升召唤消息的响应速度
     if chat_id in yuki.buffer_tasks: yuki.buffer_tasks[chat_id].cancel()
     yuki.buffer_tasks[chat_id] = asyncio.create_task(process_messages(chat_id, websocket, mode))
-    await asyncio.sleep(1)  # 确保任务已启动
-    real_time_debounce_time = DEBOUNCE_TIME  # 重置为默认防抖时间
+    # await asyncio.sleep(1)  # 确保任务已启动
+    # real_time_debounce_time = DEBOUNCE_TIME  # 重置为默认防抖时间
 
 if __name__ == "__main__":
     print("[System] Yuki 正在初始化...")
