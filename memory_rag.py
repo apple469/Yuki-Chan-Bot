@@ -28,7 +28,30 @@ class MemoryRAG:
             name="diaries",
             metadata={"hnsw:space": "cosine"} # 使用余弦相似度进行向量匹配
         )
+        self.blacklist_path = "blacklist.txt"
+        self.name_blacklist = self._load_blacklist()
+        print(f"[RAG] 已加载 {len(self.name_blacklist)} 个屏蔽词")
         print("[RAG] 记忆库初始化完成")
+
+    def _load_blacklist(self):
+        """从文件加载屏蔽词，支持自动去重和过滤空行"""
+        if not os.path.exists(self.blacklist_path):
+            # 如果文件不存在，创建一个默认的
+            default_list = ['yuki', '主人', '哥哥', '池宇健', '人家']
+            with open(self.blacklist_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(default_list))
+            return default_list
+            
+        with open(self.blacklist_path, "r", encoding="utf-8") as f:
+            # 读取每一行，去除空格，忽略以 # 开头的注释行
+            words = [line.strip().lower() for line in f 
+                     if line.strip() and not line.startswith("#")]
+        return list(set(words)) # 去重
+
+    def reload_blacklist(self):
+        """提供一个热重载接口"""
+        self.name_blacklist = self._load_blacklist()
+        print("[RAG] 屏蔽词库已完成热重载")
 
     def save_diary(self, content, chat_id=None, people=None, emotion=None):
         """保存日记到向量库，包含自动去重逻辑"""
@@ -190,8 +213,12 @@ class MemoryRAG:
         filter_cond = {"chat_id": {"$in": [cid_str, "manual_record"]}} if cid_str else None
         
         raw_keywords = jieba.analyse.extract_tags(query_text, topK=5, withWeight=True)
-        name_blacklist = ['yuki', '主人', '哥哥', '池宇健', '人家'] 
-        keywords_with_weight = [(kw, w) for kw, w in raw_keywords if kw.lower() not in name_blacklist]
+
+        # 直接调用类属性中的黑名单
+        keywords_with_weight = [
+            (kw, w) for kw, w in raw_keywords 
+            if kw.lower() not in self.name_blacklist
+        ]
         print(f"[RAG-Debug] 🎯 核心锚点词: {keywords_with_weight}")
 
         # 2. 【并行池 A】向量语义池
