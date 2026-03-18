@@ -12,14 +12,14 @@ import os
 from yuki_core import YukiState, HistoryManager, BASE_SETTING
 from message_utils import CQCodeParser, MessageSender
 from meme_processor import MemeProcessor
-from config import RETRIEVAL_TOP_K, KEEP_LAST_DIALOGUE
+from config import KEEP_LAST_DIALOGUE
 from config import DIARY_IDLE_SECONDS, DIARY_MIN_TURNS, DIARY_MAX_LENGTH
 
 # 从 config 导入 API 配置和目标配置
 from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
 from config import NAPCAT_WS_URL, TARGET_QQ, TARGET_GROUPS
 from config import (
-    DEBOUNCE_TIME, DIARY_THRESHOLD, 
+    DEBOUNCE_TIME,
     MIN_ACTIVE_ENERGY, COST_PER_REPLY, 
     MAX_MESSAGE_LENGTH
 )
@@ -45,7 +45,7 @@ async def summarize_memory(chat_id, history):
     )
     
     try:
-        response = yuki.client.chat.completions.create(
+        diary_content = yuki.robust_api_call(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": f"{BASE_SETTING}"},
@@ -56,8 +56,6 @@ async def summarize_memory(chat_id, history):
                 )}
             ]
         )
-
-        diary_content = response.choices[0].message.content
         diary_content = re.sub(r'\s*FINISHED\s*$', '', diary_content, flags=re.IGNORECASE)
         diary_content = f"【日记({time_str})】：\n{diary_content}"
         memory_rag.save_diary(diary_content, chat_id=chat_id)
@@ -127,14 +125,12 @@ async def should_i_reply(history, current_text):
         print(f"[DEBUG] \n {messages}")
         print(f"[System] 判定消息构建完成，正在发送API请求... (当前精力: {current_e:.1f})")
 
-        response = yuki.client.chat.completions.create(
+        result = yuki.robust_api_call(
             model="deepseek-chat",
             messages=messages,
             max_tokens=10,
             temperature=0.7
-        )
-
-        result = response.choices[0].message.content.strip().upper()
+        ).strip().upper()
         result = re.sub(r'\s*FINISHED\s*$', '', result, flags=re.IGNORECASE)
 
         return ("YES" in result)
@@ -149,7 +145,7 @@ async def clean_cq_code(text):
     if image_urls:
         understood_contents = []
         for url in image_urls:
-            result = await meme_processor.understand_from_url(url)
+            result = await meme_processor.understand_from_url(url, yuki)
             understood_contents.append(result)
 
         final_text = modified_text
@@ -248,12 +244,10 @@ async def process_messages(chat_id, websocket, mode):
 
         # --------------------- 发送对话补全到DeepSeek ----------------------
         print(f"[System] Yuki 正在打字...(剩余精力: {yuki.energy:.1f})")
-        response = yuki.client.chat.completions.create(
+        Yuki_Answer = yuki.robust_api_call(
             model="deepseek-chat",
-            # model = "grok-3-mini",
-            messages=combined_API_message  # 使用新构建的消息列表
+            messages=combined_API_message
         )
-        Yuki_Answer = response.choices[0].message.content
         Yuki_Answer = re.sub(r'\s*FINISHED\s*$', '', Yuki_Answer, flags=re.IGNORECASE)
 
         # real_time_debounce_time = DEBOUNCE_TIME  # 重置防抖时间，准备处理下一轮消息
