@@ -55,7 +55,7 @@ class MemeProcessor:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=2, min=4, max=60),
-        retry=retry_if_exception(is_retryable_error),  # 这里也要改
+        retry=retry_if_exception(lambda e: MemeProcessor.is_retryable_error(e)),  # 这里也要改
         reraise=True
     )
     async def call_api(self, b64_data):
@@ -157,16 +157,13 @@ class MemeProcessor:
     def extract_urls_from_text(text):
         """提取文本中的图片URL，并返回替换后的文本和URL列表
 
-        例如输入: "这是一个表情[CQ:image,url=http://example.com/image.jpg]"
+        例如输入: "这是一个表情[CQ:image,url=https://example.com/image.jpg]"
 
-        输出: ("这是一个表情[图片占位符]", ["http://example.com/image.jpg"])
+        输出: ("这是一个表情[图片占位符]", ["https://example.com/image.jpg"])
         """
         pattern = r'\[CQ:image,.*?url=([^,\]]+).*?\]'
 
-        def replace_with_placeholder(match):
-            return "[图片占位符]"
-
-        modified_text = re.sub(pattern, replace_with_placeholder, text)
+        modified_text = re.sub(pattern, "[图片占位符]", text)
         urls = re.findall(pattern, text)
         return modified_text, urls
 
