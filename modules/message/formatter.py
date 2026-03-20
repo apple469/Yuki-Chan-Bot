@@ -1,0 +1,52 @@
+import re
+from config import MAX_MESSAGE_LENGTH
+
+def smart_truncate(content, max_len = MAX_MESSAGE_LENGTH, suffix="..."):
+    """
+    保留原有调试好的逻辑：智能截断超长消息并保留CQ码完整性
+    """
+    # 如果没超过长度，直接原样返回，不做任何处理
+    if len(content) <= max_len:
+        return content
+
+    # --- 以下是你调试好的原始算法逻辑，完全不动 ---
+    print(f"[System] 检测到超长消息 ({len(content)} 字符)")
+    parts = re.split(r'(\[CQ:.*?\])', content)
+    result = []
+
+    for part in parts:
+        if not part:
+            continue
+
+        if part.startswith('[CQ:') and part.endswith(']'):
+            result.append(part)
+
+        else:
+            if len(part) > 100:
+                half = 40
+                part = part[:half] + suffix + part[-half:]
+            result.append(part)
+
+    content = ''.join(result)
+    print(f"[System] 压缩后长度: {len(content)} 字符")
+
+    return content
+
+
+class CQProtocol:
+    """纯粹的翻译官：只管文本替换，不碰网络"""
+
+    @staticmethod
+    def clean_multimedia(text: str) -> str:
+        """把所有多媒体码换成占位符"""
+        text = re.sub(r'\[CQ:image[^\]]*\]', '[图片]', text)
+        text = re.sub(r'\[CQ:face[^\]]*\]', '[表情]', text)
+        text = re.sub(r'\[CQ:record[^\]]*\]', '[语音]', text)
+        text = re.sub(r'\[CQ:video[^\]]*\]', '[视频]', text)
+        text = re.sub(r'\[CQ:file[^\]]*\]', '[文件]', text)
+        text = re.sub(r'\[CQ:json[^\]]*\]', '[小程序]', text)
+        return text
+
+    @staticmethod
+    def is_at_me(text: str, self_id: str) -> bool:
+        return f"[CQ:at,qq={self_id}]" in text
