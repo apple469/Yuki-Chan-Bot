@@ -1,4 +1,4 @@
-# connection.py
+# ws_connection.py
 import json
 import asyncio
 import websockets

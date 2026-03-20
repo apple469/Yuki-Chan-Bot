@@ -1,6 +1,6 @@
 import json
 import os
-from network.connection import BotConnector
+from network.ws_connection import BotConnector
 
 class MessageSender:
     def __init__(self, connector: BotConnector):

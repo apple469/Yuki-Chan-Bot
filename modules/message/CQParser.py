@@ -1,7 +1,8 @@
 from typing import Dict
 
+from main import meme_processor, llm, parser
 from modules.message.GetMeta import MetaGetter
-from network.connection import BotConnector
+from network.ws_connection import BotConnector
 from modules.message.CQProtocol import CQProtocol
 
 class CQCodeParser:
@@ -51,3 +52,23 @@ class CQCodeParser:
         text = await self.parse_At_CQ_codes(text)
         text = self.protocol.replace_other_CQ_codes(text)
         return text
+
+
+async def clean_cq_code(text):
+    """处理消息中的CQ码，提取图片URL并调用meme_processor理解，返回最终文本"""
+    modified_text, image_urls = meme_processor.extract_urls_from_text(text)
+
+    if image_urls:
+        understood_contents = []
+        for url in image_urls:
+            result = await meme_processor.understand_from_url(url, llm)
+            understood_contents.append(result)
+
+        final_text = modified_text
+        for content in understood_contents:
+            final_text = final_text.replace("[图片占位符]", content, 1)
+    else:
+        final_text = text
+
+    parsed_text = await parser.parse_all_cq_codes(final_text)
+    return parsed_text

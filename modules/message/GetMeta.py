@@ -1,6 +1,6 @@
 from typing import Optional, Dict
 
-from network.connection import BotConnector
+from network.ws_connection import BotConnector
 
 
 class MetaGetter:

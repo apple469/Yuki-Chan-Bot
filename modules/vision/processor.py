@@ -2,12 +2,10 @@ import asyncio
 import base64
 import hashlib
 import re
-
 import aiohttp
 import cv2
 import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
-
 from config import MAX_CONCURRENT_MEME, TEATOP_API_KEY, TEATOP_API_URL, REQUEST_TIMEOUT
 from modules.vision.utils import log
 from modules.vision.cache import MemeCache
@@ -18,13 +16,15 @@ class MemeProcessor:
         self.cache = MemeCache()
         self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_MEME)
 
-    def get_image_hash(self, image_data):
+    @staticmethod
+    def get_image_hash(image_data):
         return hashlib.md5(image_data).hexdigest()
 
-    def compress_image(self, image_data, max_size=640, quality=70):
+    @staticmethod
+    def compress_image(image_data, max_size=640, quality=70):
         try:
-            nparr = np.frombuffer(image_data, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            encoded = np.frombuffer(image_data, np.uint8)
+            img = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
             if img is None:
                 log("无法读取图片")
                 return None
@@ -97,10 +97,10 @@ class MemeProcessor:
                         message=text
                     )
 
-    async def understand_from_url(self, img_url, yuki):
+    async def understand_from_url(self, img_url, llm):
         # 1. 熔断拦截
-        yuki.check_auto_recovery()
-        if yuki.is_degraded:
+        llm.check_auto_recovery()
+        if llm.is_degraded:
             return "[动画表情]"
 
         # 2. 缓存处理
@@ -153,8 +153,8 @@ class MemeProcessor:
             print(f"[Meme ERROR] 理解表情失败: {e}")
             return "[动画表情]"
 
-
-    def extract_urls_from_text(self, text):
+    @staticmethod
+    def extract_urls_from_text(text):
         """提取文本中的图片URL，并返回替换后的文本和URL列表
 
         例如输入: "这是一个表情[CQ:image,url=http://example.com/image.jpg]"
