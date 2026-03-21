@@ -16,6 +16,25 @@ class YukiEngine:
         self.history = history_manager
         self.yuki = yuki_state
 
+    async def api_reply(self, chat_id: str, combined_text: str, history_dict: dict, mode, relevant_diaries: list[Any]) -> str:
+        # 总构建发送Deepseek补全的信息
+        combined_API_message = await self.build_chat_context(chat_id, combined_text, history_dict, mode,
+                                                               relevant_diaries)
+
+        # 发送对话补全到DeepSeek
+        print(f"[System] Yuki 正在打字...")
+        Yuki_Answer = self.llm.robust_api_call(
+            model="deepseek-chat",
+            messages=combined_API_message,
+            temperature=0.7,  # 降低温度，让它说话更稳、更常用
+            top_p=0.75,  # 稍微收窄采样范围，过滤冷门词
+            frequency_penalty=0.05,  # 极低的惩罚，允许它说大白话
+            presence_penalty=0.0,  # 不强迫它聊新话题
+            max_tokens=100  # 强制短句，短句更容易显自然
+        )
+        Yuki_Answer = re.sub(r'\s*FINISHED\s*$', '', Yuki_Answer, flags=re.IGNORECASE)
+        return Yuki_Answer
+
     async def decide_to_reply(self, history, current_text):
         """判断是否回复群聊"""
         current_e = self.yuki.update_energy()

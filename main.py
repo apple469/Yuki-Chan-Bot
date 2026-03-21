@@ -2,7 +2,7 @@
 # by: Eganchiyu
 import asyncio
 import time
-import re
+
 from core.brain import YukiState
 from core.engine import YukiEngine
 from core.history_manager import HistoryManager
@@ -66,35 +66,20 @@ async def main_process(chat_id, mode):
     relevant_diaries = memory_rag.search_diaries(combined_text, chat_id=chat_id)
     print(f"[System] 检索到 {len(relevant_diaries)} 条相关日记:")
 
-    # 总构建发送Deepseek补全的信息
-    combined_API_message = await engine.build_chat_context(chat_id, combined_text, history_dict, mode, relevant_diaries)
+    Yuki_Answer = await engine.api_reply(chat_id, combined_text, history_dict, mode, relevant_diaries)
 
-    try:
-        # 发送对话补全到DeepSeek
-        print(f"[System] Yuki 正在打字...")
-        Yuki_Answer = llm.robust_api_call(
-            model = "deepseek-chat",
-            messages = combined_API_message,
-            temperature =0.7,  # 降低温度，让它说话更稳、更常用
-            top_p = 0.75,  # 稍微收窄采样范围，过滤冷门词
-            frequency_penalty = 0.05,  # 极低的惩罚，允许它说大白话
-            presence_penalty = 0.0,  # 不强迫它聊新话题
-            max_tokens = 100  # 强制短句，短句更容易显自然
-        )
-        Yuki_Answer = re.sub(r'\s*FINISHED\s*$', '', Yuki_Answer, flags=re.IGNORECASE)
+    # 保存回复到上下文
+    history_manager.append_to_log(chat_id, "Yuki", Yuki_Answer)
+    history_dict[chat_id].append({"role": "assistant", "content": Yuki_Answer})
+    history_manager.save(history_dict)
 
-        # 保存回复到上下文
-        history_manager.append_to_log(chat_id, "Yuki", Yuki_Answer)
-        history_dict[chat_id].append({"role": "assistant", "content": Yuki_Answer})
-        history_manager.save(history_dict)
+    if mode == "group":
+        yuki.consume_energy()
+    print(f"[System] Yuki 正在发送消息...(剩余精力: {yuki.energy:.1f})")
+    await sender.send(chat_id, Yuki_Answer, mode=mode)
 
-        if mode == "group":
-            yuki.consume_energy()
-        print(f"[System] Yuki 正在发送消息...(剩余精力: {yuki.energy:.1f})")
-        await sender.send(chat_id, Yuki_Answer, mode=mode)
-
-    except Exception as e:
-        print(f"Deepseek 调用失败: {e}")
+    # except Exception as e:
+    #     print(f"Deepseek 调用失败: {e}")
 
     # 日记触发检查：如果历史过长，强制写日记
     if len(history_dict[chat_id]) > DIARY_MAX_LENGTH:
@@ -106,7 +91,6 @@ async def main_process(chat_id, mode):
         # 3. 保存整个大字典
         history_manager.save(history_dict)
         print(f"[{chat_id}] 日记写入完成，全量历史已同步。")
-
 
 async def napcat_listen(mode):
     asyncio.create_task(engine.idle_diary_checker())   # 启动后台检查
@@ -172,7 +156,7 @@ if __name__ == "__main__":
     # 实例化Yuki状态
     yuki = YukiState()
     # 实例化LLM请求器
-    llm = ApiCall(TEATOP_API_KEY, TEATOP_BASE_URL)
+    llm = ApiCall(DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL)
     # 实例化历史记录管理器
     history_manager = HistoryManager()
     print("[System] 开始初始化记忆系统（RAG）...")
