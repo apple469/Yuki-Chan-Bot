@@ -7,8 +7,8 @@ import datetime
 import time
 from typing import Any
 from core.prompts import BASE_SETTING, SUMMARY_PROMPT
-from config import COST_PER_REPLY, MIN_ACTIVE_ENERGY, KEEP_LAST_DIALOGUE, DIARY_IDLE_SECONDS, DIARY_MIN_TURNS
-from prompts import build_ice_break_prompt
+from config import *
+from core.prompts import build_ice_break_prompt
 
 
 class YukiEngine:
@@ -32,7 +32,7 @@ class YukiEngine:
         # 发送对话补全到DeepSeek
         print(f"[System] Yuki 正在打字...")
         try:
-            Yuki_Answer = self.llm.robust_api_call(
+            Yuki_Answer = await self.llm.robust_api_call(
                 model="deepseek-chat",
                 messages=combined_API_message,
                 temperature=0.7,  # 降低温度，让它说话更稳、更常用
@@ -106,7 +106,7 @@ class YukiEngine:
             print(f"[DEBUG] \n {messages}")
             print(f"[System] 判定消息构建完成，正在发送API请求... (当前精力: {current_e:.1f})")
 
-            result = self.llm.robust_api_call(
+            result = await self.llm.robust_api_call(
                 model="deepseek-chat",
                 messages=messages,
                 max_tokens=10,
@@ -124,7 +124,7 @@ class YukiEngine:
         dialogue_msgs = [msg for msg in history if msg["role"] != "system"]
         content_to_summarize = json.dumps(dialogue_msgs, ensure_ascii=False)
         try:
-            diary_content = self.llm.robust_api_call(
+            diary_content = await self.llm.robust_api_call(
                 model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": f"{BASE_SETTING}"},
@@ -219,55 +219,63 @@ class YukiEngine:
         return combined_API_message
 
     async def ice_break_monitor(self):
-        """单独的异步轮询，监控每个群的冷场情况"""
+        await asyncio.sleep(2)
         while True:
-            # 每隔 10-20 分钟检查一次，不需要太频繁
-            await asyncio.sleep(random.randint(600, 1200))
+            target_list = [str(gid) for gid in TARGET_GROUPS]
+            # 用来存放通过判定的群组，避免在锁内执行长任务
+            pending_ice_break = []
 
             async with self.yuki.lock:
-                for cid in list(self.yuki.group_activity.keys()):
-                    # 获取归一化后的数据
+                # --- 锁内只做纯数值计算和判定 ---
+                for cid in target_list:
                     activity = self.yuki.group_activity.get(cid, 0.0)
+                    self.yuki.update_energy()
+                    self.yuki.update_desire_to_reply(cid)
                     desire = self.yuki.desire_to_start_topic.get(cid, 0)
 
-                    # 判断：冷场(activity < 0.5) 且 想说话(desire > 70)
-                    if activity < 0.5 and desire > 70:
-                        # 最后的随机骰子，增加灵动感
+                    if activity < 0.5 and desire > 75:
                         if random.random() < 0.8:
-                            print(f"[IceBreak] 发现冷场群 {cid}，准备主动出击！")
-                            asyncio.create_task(self.break_ice(cid))
+                            pending_ice_break.append(cid)
+            # --- 锁已释放 ---
+
+            # 执行破冰任务
+            for cid in pending_ice_break:
+                print(f"[IceBreak] 目标群 {cid} 触发冷场唤醒！")
+                # 异步抛出，不等待它执行完，直接进入下一个循环的 sleep
+                asyncio.create_task(self.break_ice(cid))
+
+            # 巡检周期
+            await asyncio.sleep(random.randint(600, 1200))
 
     async def break_ice(self, chat_id: str) -> str:
-        # 总构建发送Deepseek补全的信息
-        # 加载上下文信息
+        # 1. 异步加载历史 (假设 load 是同步的，我们用线程池跑它)
+        # 如果 history.load 很快，可以暂时保留同步，但 save 必须小心
         history_dict = self.history.load()
-        # 如果不存在则初始化
+
         if chat_id not in history_dict:
             return None
 
+        # 2. 构造 Query 逻辑 (保持你的原汁原味)
         recent_msgs = history_dict[chat_id][-5:]
         context_text = "".join([m['content'] for m in recent_msgs if m['role'] == 'user'])
-
-        # 2. 结合当前时间感
         now_hour = datetime.datetime.now().hour
         time_label = "深夜" if 1 <= now_hour <= 5 else "日常"
-
-        # 3. 混合构建：时间感 + 最近聊到的模糊语义
-        # 这样既能触发关键词匹配，又能让向量搜索找到氛围相近的日记
         query = f"{time_label}氛围下，关于 {context_text[:30]} 的记忆或有趣瞬间"
 
-        # 根据上文长度动态决定提取多少词
-        dynamic_top_k = 5
-        if len(query) > 50:
-            dynamic_top_k = 8  # 信息量大，多抓一点锚点词
+        dynamic_top_k = 8 if len(query) > 50 else 5
 
+        # 3. RAG 检索
         relevant_diaries = self.rag.search_diaries(query, chat_id=chat_id, top_k=dynamic_top_k)
-        print(f"[System] 检索到 {len(relevant_diaries)} 条相关日记:")
+
+        # 注意：这里调用的是我们刚刚写好的那个 context 构造函数
         prompt = build_ice_break_prompt(chat_id, relevant_diaries, history_dict)
-        # 发送对话补全到DeepSeek
-        print(f"[System] Yuki 正在破冰...")
+
+        # print(f"[Engine Debug] 构建的prompt内容：{prompt}")
+
+        print(f"[System] Yuki 正在破冰... (Query: {query})")
         try:
-            Yuki_Answer = self.llm.robust_api_call(
+            # 4. API 调用
+            Yuki_Answer = await self.llm.robust_api_call(
                 model="deepseek-chat",
                 messages=prompt,
                 temperature=0.8,  # 降低温度，让它说话更稳、更常用
@@ -275,13 +283,23 @@ class YukiEngine:
                 frequency_penalty=0.2,  # 极低的惩罚，允许它说大白话
                 max_tokens=60  # 强制短句，短句更容易显自然
             )
+
+            # 清理与记录
             Yuki_Answer = re.sub(r'\s*FINISHED\s*$', '', Yuki_Answer, flags=re.IGNORECASE)
+
+            # 5. 持久化数据 (注意：在异步中尽量减少频繁 save)
             self.history.append_to_log(chat_id, "Yuki", Yuki_Answer)
             history_dict[chat_id].append({"role": "assistant", "content": Yuki_Answer})
             self.history.save(history_dict)
-            self.yuki.consume_energy()
-            print(f"[System] Yuki 正在发送消息...(剩余精力: {self.yuki.energy:.1f})")
+
+            # 6. 【核心修复】安全地消耗精力
+            async with self.yuki.lock:
+                self.yuki.consume_energy()
+                current_energy = self.yuki.energy
+
+            print(f"[System] 破冰成功！发送给 {chat_id} (剩余精力: {current_energy:.1f})")
             await self.sender.send(chat_id, Yuki_Answer, mode="group")
+
         except Exception as e:
-            print(f"Deepseek 调用失败: {e}")
-            return f"API 接口调用失败"
+            print(f"Deepseek 破冰调用失败: {e}")
+            return f"API 调用失败"

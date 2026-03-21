@@ -21,9 +21,10 @@ SUMMARY_PROMPT = (
 
 import datetime
 
-async def build_ice_break_prompt( chat_id, relevant_diaries: list, history_dict: dict):
+def build_ice_break_prompt(chat_id, relevant_diaries: list, history_dict: dict):
     """
     构建专用的破冰 Prompt (保留原始提示词逻辑)
+    :param chat_id:群聊群号
     :param relevant_diaries: RAG 检索回来的字典列表
     :param history_dict: 原始历史字典
     """
