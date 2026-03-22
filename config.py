@@ -29,7 +29,7 @@ if not TEATOP_API_KEY and not DEEPSEEK_API_KEY:
     print("Warning: 未检测到任何有效的 API KEY，请检查 .env 文件。")
 # ================= 连接配置 =================
 NAPCAT_WS_URL = "ws://127.0.0.1:3001"
-
+MAX_RETRIES = 3
 # ================= 目标配置 =================
 TARGET_QQ = 737337230
 # TARGET_GROUP = 1034986009 #猫猫窝
