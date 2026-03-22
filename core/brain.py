@@ -1,9 +1,7 @@
 # core/brain.py
 import datetime
 import math
-
-from conda.common.constants import NULL
-
+from collections import defaultdict
 from core.prompts import YUKI_SETTING_PRIVATE, YUKI_SETTING_GROUP
 from config import *
 import asyncio
@@ -13,7 +11,7 @@ class YukiState:
         self.lock = asyncio.Lock()  # 进程锁，保护数值计算
         self.energy = {}  # {chat_id: current_energy}
         self.last_update = {}
-        self.message_buffer = {}  # chat_id: [messages]
+        self.message_buffer = defaultdict(list)
         self.buffer_tasks = {}    # chat_id: task
         self.last_message_time = {} # chat_id: timestamp
         self.writing_diary = set()  # chat_id
