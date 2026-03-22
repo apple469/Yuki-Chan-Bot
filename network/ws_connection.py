@@ -4,7 +4,7 @@ import asyncio
 import websockets
 from typing import Optional, Dict
 from config import NAPCAT_WS_URL
-
+from asyncio import Future
 
 class BotConnector:
     def __init__(self, ws_url: str = NAPCAT_WS_URL):
