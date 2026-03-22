@@ -11,6 +11,8 @@ class BotConnector:
         self.ws_url = ws_url
         self.websocket = None
         self._lock = asyncio.Lock()
+        # 新增：用于存放等待响应的 Future 对象
+        self._response_futures: Dict[str, Future] = {}
 
     async def ensure_connection(self):
         """最兼容的版本判断：确保返回一个真正 OPEN 的连接"""
@@ -49,15 +51,23 @@ class BotConnector:
             return self.websocket
 
     async def listen(self):
-        """闭环监听：自动重连"""
+        """闭环监听：统一接收并分发消息"""
         while True:
             try:
-                # 始终获取当前最新的可用连接
                 ws = await self.ensure_connection()
                 async for message in ws:
-                    yield json.loads(message)
+                    data = json.loads(message)
+
+                    # 关键逻辑：检查是否有正在等待这个 echo 的请求
+                    echo = data.get("echo")
+                    if echo and echo in self._response_futures:
+                        future = self._response_futures.pop(echo)
+                        if not future.done():
+                            future.set_result(data)
+
+                    # 正常的事件流抛出
+                    yield data
             except Exception as e:
-                # 发生任何网络异常，标记连接失效，等待下一次循环重连
                 print(f"[Network] 监听异常: {e}")
                 self.websocket = None
                 await asyncio.sleep(3)
@@ -68,22 +78,32 @@ class BotConnector:
             if self.websocket:
                 await self.websocket.close()
                 self.websocket = None
+
     async def send_request(self, action: str, params: dict, echo: str) -> Optional[Dict]:
         try:
             ws = await self.ensure_connection()
+
+            # 1. 注册 Future
+            loop = asyncio.get_running_loop()
+            future = loop.create_future()
+            self._response_futures[echo] = future
+
             request = {"action": action, "params": params, "echo": echo}
             await ws.send(json.dumps(request))
+
             try:
-                while True:
-                    response = await asyncio.wait_for(ws.recv(), timeout=5.0)
-                    data = json.loads(response)
-                    if data.get("echo") == echo:
-                        return data
+                # 2. 等待结果 (这里才需要 await)
+                return await asyncio.wait_for(future, timeout=5.0)
             except asyncio.TimeoutError:
-                print(f"请求 {action} 超时")
+                print(f"请求 {action} 超时 (echo: {echo})")
+                return None
+            finally:
+                # 3. 无论成功还是超时，都要清理字典
+                # pop 是同步操作，不需要 await
+                self._response_futures.pop(echo, None)
 
         except Exception as e:
             print(f"网络异常: {e}")
-            await self.close()
-        return None
+            self._response_futures.pop(echo, None)
+            return None
 
