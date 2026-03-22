@@ -22,13 +22,15 @@ async def main_process(chat_id, mode):
     global real_time_debounce_time
     await asyncio.sleep(real_time_debounce_time)  # 防抖等待，合并短时间内的多条消息
     real_time_debounce_time = DEBOUNCE_TIME  # 重置防抖时间，准备处理下一轮消息
-    messages = yuki.pop_buffer(chat_id)
-    if not messages: return
+    message_objs = yuki.pop_buffer(chat_id)  # 此时拿到的是 list[dict]
+    if not message_objs: return
     # 提高群聊的活跃度
     first_time = time.time()
     await yuki.boost_activity(chat_id)
     # 视觉理解总处理
-    combined_text = "\n".join(messages)
+    # 提取所有文本用于视觉处理和后续拼合
+    all_contents = [m["content"] for m in message_objs]
+    combined_text = "\n".join(all_contents)
     modified_text, image_urls = meme_processor.extract_urls_from_text(combined_text)
     if image_urls:
         understood_contents = []
@@ -58,7 +60,7 @@ async def main_process(chat_id, mode):
 
     print("[System] 加载完成")
 
-    if (mode == "group") and (not await engine.decide_to_reply(history_dict[chat_id], combined_text, chat_id)): # 判定是否回复
+    if (mode == "group") and (not await engine.decide_to_reply(history_dict[chat_id], message_objs, chat_id)):
         # 保存获取的上下文信息
         history_manager.save(history_dict)
         print("[System] Yuki 决定继续潜水...")
@@ -131,7 +133,8 @@ async def napcat_listen(mode):
                             group_id,
                             f"【“{name}”】说: {raw_msg}",
                             mode,
-                            raw_message=raw_msg
+                            raw_message=raw_msg,
+                            sender_name=name  # 传入姓名用于标识
                         )
 
         except Exception as e:
@@ -140,7 +143,7 @@ async def napcat_listen(mode):
             print("[System] 5 秒后将尝试重启监听进程...")
             await asyncio.sleep(5)
 
-async def manage_buffer(chat_id, content, mode, raw_message=''):
+async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''):
     global real_time_debounce_time
     cid_str = str(chat_id)
 
@@ -166,11 +169,19 @@ async def manage_buffer(chat_id, content, mode, raw_message=''):
         history_manager.append_chat(chat_id, "assistant", "(已发送帮助文档图片)")
         return 
     # 入队
-    
-    if chat_id not in yuki.message_buffer: yuki.message_buffer[chat_id] = []
-    yuki.message_buffer[chat_id].append(content)
-    if "yuki" in content.lower():
-        real_time_debounce_time = 5  # 提升召唤消息的响应速度
+
+    # 判定是否为机器人（可以根据名称含 BOT，或者特定的 QQ 号判定）
+    is_bot = "BOT" in sender_name or "机器人" in sender_name
+
+    yuki.message_buffer[chat_id].append({
+        "name": sender_name,
+        "content": content,  # 这是带 【“姓名”】说: 的完整格式
+        "raw_text": raw_message,  # 这是原始纯文本
+        "is_bot": is_bot
+    })
+
+    if "yuki" in raw_message.lower():  # 使用原始文本判断，更准确
+        real_time_debounce_time = 5
     if chat_id in yuki.buffer_tasks: yuki.buffer_tasks[chat_id].cancel()
     yuki.buffer_tasks[chat_id] = asyncio.create_task(main_process(chat_id, mode))
 

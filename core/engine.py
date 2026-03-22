@@ -47,7 +47,7 @@ class YukiEngine:
             print(f"Deepseek 调用失败: {e}")
             return f"API 接口调用失败"
 
-    async def decide_to_reply(self, history, current_text, chat_id):
+    async def decide_to_reply(self, history, message_objs, chat_id):
         """判断是否回复群聊"""
         """
             三段式决策：强干预 -> 弱判定 -> 逻辑判定
@@ -57,11 +57,26 @@ class YukiEngine:
         self.yuki.update_desire_to_reply(chat_id)
         desire = self.yuki.desire_to_start_topic.get(str(chat_id), 0)
 
-        if "BOT" in current_text:
-            print("[System] 检测到BOT发Yuki的名字，过滤……")
-        if any(keyword in current_text for keyword in ["主人", "哥哥", "Yuki", "yuki"]) and ("BOT" not in current_text):
-            print(f"[System] 检测到关键召唤，Yuki 强制清醒 (当前精力: {current_e:.1f})")
+        keywords = ["主人", "哥哥", "Yuki", "yuki"]
+        human_calling = any(
+            not m["is_bot"] and any(kw in m["raw_text"].lower() for kw in keywords)
+            for m in message_objs
+        )
+
+        # B. 检查是否【只有机器人】在艾特 Yuki（循环风险）
+        bot_calling_only = all(
+            m["is_bot"] for m in message_objs
+            if any(kw in m["raw_text"].lower() for kw in keywords)
+        )
+
+        # 逻辑干预：
+        if human_calling:
+            print(f"[System] 检测到人类关键召唤，Yuki 强制清醒")
             return True
+
+        if bot_calling_only and any(any(kw in m["raw_text"].lower() for kw in keywords) for m in message_objs):
+            desire *= 0.7  # 你的核心诉求：欲望乘 0.7
+            print(f"[System] 检测到仅有 BOT 在召唤 Yuki，为了防止无限套娃，本次放行。欲望打折：{desire:.1}%")
 
         # --- 强干预层 ---
         if desire >= 80:
