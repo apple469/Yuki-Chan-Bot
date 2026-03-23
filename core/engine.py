@@ -238,14 +238,20 @@ class YukiEngine:
 
     async def ice_break_monitor(self):
         while True:
-            await asyncio.sleep(random.randint(600, 1200))
+            await asyncio.sleep(random.randint(600, 1800))
             target_list = [str(gid) for gid in TARGET_GROUPS]
+            print(f"已加载{len(target_list)}条数据")
             pending_ice_break = []
 
             async with self.yuki.lock:
                 for cid in target_list:
+
+                    self.yuki.update_energy(chat_id=cid)
+                    self.yuki.update_desire_to_reply(cid)
                     activity = self.yuki.group_activity.get(cid, 0.0)
                     desire = self.yuki.desire_to_start_topic.get(cid, 0)
+
+                    print(f"正在检查{cid}：群聊活跃度{activity} | 发言欲望{desire}")
 
                     # 获取当前的失败次数，默认为 0
                     fail_count = self.yuki.ice_break_fail_count.get(cid, 0)
