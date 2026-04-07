@@ -218,7 +218,7 @@ if __name__ == "__main__":
     if choice != "2":
         # 初始化巡检名单，预载历史中的群聊ID和最后消息时间，确保后台检查能正常工作
         h_dict = history_manager.load()
-        for cid in h_dict.keys():
+        for cid in TARGET_GROUPS:
             yuki.last_message_time[str(cid)] = time.time()
             current_e = yuki.update_energy(str(cid))
             yuki.update_desire_to_reply(str(cid))
