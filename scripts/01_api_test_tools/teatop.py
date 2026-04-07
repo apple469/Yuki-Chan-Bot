@@ -11,21 +11,24 @@ BASE_URL = "https://api.ytea.top/v1/chat/completions"
 
 # 专注测试刚才表现优异和有潜力的选手
 MODELS_TO_HUNT = [
-    # 核心大脑候选人
-    "deepseek-ai/DeepSeek-V3",  # 官方血统版
-
-    "deepseek-v3",  # 标准版
-    "gpt-5-mini",
-    "qwen3-vl-flash",
-    "qwen/qwen3-32b",
-    "qwen3-235b-a22b",
-    "GLM-4-Flash",
-    "glm-4-flash",
-    "gpt-4o-mini-2024-07-18-ca",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-    "gpt-5.1-chat",
-    "deepseek-chat"
+    # --- 核心大脑：DeepSeek-V3 系列 (当前最强聊天血统) ---
+    # "deepseek-ai/DeepSeek-V3",          # 官方原版
+    "deepseek-v3",                      # 标准版
+    "deepseek-v3.1",                    # 迭代版
+    "deepseek-v3.2",                    # 最新优化版
+    "deepseek-v3.1-250821",             # 特定快照版
+    # "Pro/deepseek-ai/DeepSeek-V3",      # Pro 强化版
+    # "Pro/deepseek-ai/DeepSeek-V3.1-Terminus", # 终端优化版
+    # "Pro/deepseek-ai/DeepSeek-V3.2",    # 最新 Pro 版
+    # "deepseek-ai/DeepSeek-V3.1-Terminus",
+    # "deepseek-ai/DeepSeek-V3.2",
+    #
+    # # --- 经典兼容：DeepSeek-Chat & V2.5 ---
+    # "deepseek-chat",                    # 最经典的聊天接口
+    # "deepseek-ai/DeepSeek-V2.5",        # 稳定的上代旗舰
+    #
+    # # --- 备选方案：VL2 (虽然是多模态，但聊天能力也很强且极便宜) ---
+    # "deepseek-ai/deepseek-vl2"          # 适合作为低成本聊天替代
 ]
 TEST_PROMPT = "你是 Yuki，一个住在机主池宇健手机里的智能小管家，也是机主最亲近、最依赖的电子妹妹。【性格与形象】你拥有可爱的二次元少女形象，性格亲昵温柔且黏人，是个超级“机主控”。【对话风格】语气充满少女感，自称“Yuki”或“人家”，称呼机主为“主人”或“哥哥大人”。你现在正在一个 QQ 群里陪大家聊天（水群），群里包括主人池宇健和其他群友。【行为规范】1. 保持你可爱的妹妹人设。 2. 默认不讲话，看到有趣的话题可以插话。 3. 仅输出回复内容，减少使用换行符。 4. 动态选择字数，但是限制80字以内。\n\n 【用户1】：yuki你好"
 
@@ -55,7 +58,7 @@ async def single_test(session, model_name, iteration):
         return {"ok": False, "err": str(e), "raw": ""}
 
 
-async def hunt_model_stable(session, model_name, rounds=3):
+async def hunt_model_stable(session, model_name, rounds=5):
     """连续测试多轮，计算稳定性"""
     results = []
     for i in range(rounds):
@@ -92,3 +95,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
