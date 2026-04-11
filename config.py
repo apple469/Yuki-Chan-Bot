@@ -9,29 +9,48 @@ MAX_MESSAGE_LENGTH: int = 200  # 最大消息长度，防止token炸弹
 
 # ================= 日记触发配置 =================
 DIARY_IDLE_SECONDS = 120          # 空闲触发时间（秒），2分钟
-DIARY_MIN_TURNS = 10               # 最小对话轮数（非系统消息条数）
+DIARY_MIN_TURNS = 15               # 最小对话轮数（非系统消息条数）
 DIARY_MAX_LENGTH = 50             # 保底历史长度阈值（超过则强制写日记）
 
 # ================= RAG 记忆配置 =================
-# EMBED_MODEL = "shibing624/text2vec-base-chinese"  # 中文嵌入模型
-EMBED_MODEL = "./models/text2vec-base-chinese"  # 本地模型路径
-RETRIEVAL_TOP_K = 20                        # 每次检索返回日记条数
-KEEP_LAST_DIALOGUE = 5                     # 保留最近对话条数（短期记忆）
-# ================= API配置 =================
-DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-TEATOP_BASE_URL = "https://api.ytea.top/v1"
-TEATOP_API_URL = "https://api.ytea.top/v1/chat/completions"
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
-TEATOP_API_KEY = os.getenv("TEATOP_API_KEY", "").strip()
-if not TEATOP_API_KEY and not DEEPSEEK_API_KEY:
-    print("Warning: 未检测到任何有效的 API KEY，请检查 .env 文件。")
+RETRIEVAL_TOP_K = 20                        # 每次检索返回日记条数
+KEEP_LAST_DIALOGUE = 10                     # 保留最近对话条数（短期记忆）
+# ================= API配置 =================
+LLM_BASE_URL = "https://api.ytea.top/v1"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+IMAGE_PROCESS_API_URL = "https://api.ytea.top/v1/chat/completions"
+
+BACKUP_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+LLM_API_KEY = os.getenv("LLM_API_KEY", "").strip()
+IMAGE_PROCESS_API_KEY = os.getenv("IMAGE_PROCESS_API_KEY", "").strip()
+MASTER_NAME = os.getenv("MASTER_NAME", "主人") # 默认叫主人，也可以改
+
+# 主对话模型 (例如: deepseek-chat, gpt-4o)
+LLM_MODEL = "deepseek-v3.2"
+BACKUP_MODEL = "deepseek-chat"
+
+# 图像分析模型 (如果有专门的视觉模型需求)
+# 注意！！如果没有多模态模型，想关闭视觉识别，就将字段留空。如下面所示：
+#VISION_MODEL = ""
+VISION_MODEL = "qwen3-vl-flash"
+
+ROBOT_NAME = os.getenv("ROBOT_NAME", "Yuki")
+
 # ================= 连接配置 =================
 NAPCAT_WS_URL = "ws://127.0.0.1:3001"
 MAX_RETRIES = 3
 # ================= 目标配置 =================
-TARGET_QQ = 737337230
-TARGET_GROUPS = [1057020972, 782427668]
+TARGET_QQ = int(os.getenv("TARGET_QQ", 737337230))
+
+# --- 数组（列表）转换 ---
+raw_groups = os.getenv("TARGET_GROUPS", "")
+if raw_groups:
+    # 逻辑：分割字符串 -> 去除空格 -> 转换为 int -> 转为 list
+    TARGET_GROUPS = [int(g.strip()) for g in raw_groups.split(",") if g.strip()]
+else:
+    # 如果 env 里没写，给一个默认列表
+    TARGET_GROUPS = []
 # ================= 文件配置 =================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +79,7 @@ DECAY_LEVEL = 0.6
 SIGMOID_CENTRE = 50.00
 SIGMOID_ALPHA = 0.08
 
+keywords = ["主人", "哥哥", f"{ROBOT_NAME}"]
 # ================= 并发配置 =================
 MAX_CONCURRENT_MEME = 1
 

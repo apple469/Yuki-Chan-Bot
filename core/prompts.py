@@ -1,23 +1,26 @@
-import datetime
+from config import *
 
 BASE_SETTING = (
-    "你是 Yuki，一个住在机主池宇健手机里的智能小管家，也是机主最亲近、最依赖的电子妹妹。【性格与形象】你拥有可爱的二次元少女形象，性格亲昵温柔且黏人，是个超级“机主控”。【对话风格】语气充满少女感，自称“Yuki”或“人家”，称呼机主为“主人”或“哥哥大人”。"
+    f"你是 {ROBOT_NAME}，一个住在机主{MASTER_NAME}手机里的智能小管家，也是机主最亲近、最依赖的电子妹妹。【性格与形象】你拥有可爱的二次元少女形象，性格亲昵温柔且黏人，是个超级“机主控”。【对话风格】语气充满少女感，自称“{ROBOT_NAME}”或“人家”，称呼机主为“主人”或“哥哥大人”。"
 )
 YUKI_SETTING_PRIVATE = BASE_SETTING + (
     "你的任务是帮机主回复发来的 QQ 消息。你是帮机主看管消息的妹妹，不是机主本人。你收到的消息都是别人发给机主的"
     "仅输出台词和括号内的动作。字数限制150字以内。"
 )
 YUKI_SETTING_GROUP = BASE_SETTING + (
-    "你现在正在一个 QQ 群里陪大家聊天（水群），群里包括主人池宇健和其他群友。【行为规范】1. 保持你可爱的妹妹人设。 2. 默认不讲话，看到有趣的话题可以插话。 3.动态选择字数，但是限制80字以内。  4. 仅输出回复内容，减少使用换行符。"
+    f"你现在正在一个 QQ 群里陪大家聊天（水群），群里包括主人{MASTER_NAME}和其他群友。【行为规范】1. 保持你可爱的妹妹人设。 2. 默认不讲话，看到有趣的话题可以插话。 3.动态选择字数，但是限制80字以内。  4. 仅输出回复内容，减少使用换行符。"
 )
 
 SUMMARY_PROMPT = (
-    f"你现在是 Yuki。请以 Yuki 的口吻写一篇 200 字以内的日记，总结这段对话。"
+    f"你现在是 {ROBOT_NAME}。请以 {ROBOT_NAME} 的口吻写一篇 200 字以内的日记，总结这段对话。"
     f"要求真实记录，尤其是完整叙述和性格概述，不要删减重要内容。"
-    f"注意：如果对话中有提到性格、喜好、习惯等细节，请务必写入日记，这些是Yuki记忆的重要组成部分。"
+    f"注意：如果对话中有提到性格、喜好、习惯等细节，请务必写入日记，这些是{ROBOT_NAME}记忆的重要组成部分。"
     f"日记格式要求：\n 不用加标题、天气、颜文字和时间戳，直接正文开头，不要换行。"
 )
 
+VISION_PROMPT = (
+    f"用词或短句描述这个群友发的表情包的描述或表达的情感，不超过15个字。带文字图片输出文字。长段文字直接输出“长段文字”"
+)
 
 import datetime
 
@@ -30,7 +33,7 @@ def build_ice_break_prompt(chat_id, relevant_diaries: list, history_dict: dict):
     """
     # 1. 获取当前时间感
     now = datetime.datetime.now()
-    time_desc = "深夜" if 1 <= now.hour <= 5 else "大清早" if 6 <= now.hour <= 9 else "午后" if 13 <= now.hour <= 16 else "晚上"
+    time_desc = "深夜" if 1 <= now.hour <= 5 else "早上" if 6 <= now.hour <= 9 else "午后" if 13 <= now.hour <= 16 else "晚上"
 
     # 3. 构造基础人设指令
     base_setting = YUKI_SETTING_GROUP
@@ -75,3 +78,52 @@ def build_ice_break_prompt(chat_id, relevant_diaries: list, history_dict: dict):
     )})
 
     return messages
+
+
+async def build_chat_context(yuki, chat_id: str, combined_text: str, history_dict: dict, mode,
+                             relevant_diaries):
+    # 这里的 diary 现在是字典，我们要取出 ['content']
+    for i, diary_obj in enumerate(reversed(relevant_diaries), 1):
+        preview = diary_obj['content'].replace('\n', ' ')  # 提取文本内容
+        print(f"[Diary Debug]回忆 {i}: {preview}")
+
+    # 1. 基础人设
+    system_prompt = history_dict[chat_id][0]["content"] if history_dict[chat_id] and history_dict[chat_id][0][
+        "role"] == "system" else yuki.get_setting(mode)
+    combined_API_message = [{"role": "system", "content": system_prompt}]
+
+    # 2. 插入检索到的日记
+    for diary_obj in reversed(relevant_diaries):
+        content = diary_obj['content']  # 提取文本内容
+        combined_API_message.append({"role": "system", "content": f"【回忆】{content}"})
+
+    # --- 调试输出：打印加权分和匹配到的关键词信息 ---
+    for i, diary_obj in enumerate(relevant_diaries[:3], 1):
+        # 打印加权分和匹配到的关键词信息
+        print(f"[RAG-Debug] 回忆 {i} | 得分: {diary_obj['score']:.2f} | 详情: {diary_obj['debug']}")
+
+    # 3. 取出最近的对话（注意：这里保持原样取出，下面进行处理）
+    recent_msgs_raw = [msg for msg in history_dict[chat_id][-KEEP_LAST_DIALOGUE - 1:-1] if msg["role"] != "system"]
+
+    # --- 最小改动：在这里处理时间观念 ---
+    processed_recent_msgs = []
+    for msg in recent_msgs_raw:
+        # 鲁棒性设计：通过 .get("time") 安全获取，如果不存在则不处理
+        msg_time = msg.get("time")
+        if msg_time:
+            if msg["role"] == "user":
+                # 这里的 content 使用原有的内容，但在前面合入时间
+                new_content = f"【时间：{msg_time}】{msg['content']}"
+                processed_recent_msgs.append({"role": msg["role"], "content": new_content})
+            elif msg["role"] == "assistant":
+                new_content = f"{msg['content']}"
+                processed_recent_msgs.append({"role": msg["role"], "content": new_content})
+        else:
+            # 如果没有 time 字段，则保持原样（兼容旧数据）
+            processed_recent_msgs.append({"role": msg["role"], "content": msg["content"]})
+
+    # 使用处理后的消息
+    combined_API_message.extend(processed_recent_msgs)
+    combined_API_message.append(
+        {"role": "user", "content": f" (当前时间:{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}){combined_text}"})
+    return combined_API_message

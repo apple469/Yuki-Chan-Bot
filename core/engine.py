@@ -6,7 +6,7 @@ import asyncio
 import datetime
 import time
 from typing import Any
-from core.prompts import BASE_SETTING, SUMMARY_PROMPT
+from core.prompts import BASE_SETTING, SUMMARY_PROMPT, build_chat_context
 from config import *
 from core.prompts import build_ice_break_prompt
 
@@ -21,19 +21,19 @@ class YukiEngine:
 
     async def api_reply(self, chat_id: str, combined_text: str, history_dict: dict, mode, relevant_diaries: list[Any]) -> str:
         # 总构建发送Deepseek补全的信息
-        combined_API_message = await self.build_chat_context(
-            chat_id,
-            combined_text,
-            history_dict,
-            mode,
-            relevant_diaries
-        )
-
+        combined_API_message = await build_chat_context(self.yuki,
+                                                        chat_id,
+                                                        combined_text,
+                                                        history_dict,
+                                                        mode,
+                                                        relevant_diaries
+                                                        )
+        await asyncio.sleep(0.2)
         # 发送对话补全到DeepSeek
         print(f"[System] Yuki 正在打字...")
         try:
             Yuki_Answer = await self.llm.robust_api_call(
-                model="deepseek-v3.2",
+                model=LLM_MODEL,
                 messages=combined_API_message,
                 temperature=0.7,  # 降低温度，让它说话更稳、更常用
                 top_p=0.75,  # 稍微收窄采样范围，过滤冷门词
@@ -44,20 +44,16 @@ class YukiEngine:
             Yuki_Answer = re.sub(r'\s*FINISHED\s*$', '', Yuki_Answer, flags=re.IGNORECASE)
             return Yuki_Answer
         except Exception as e:
-            print(f"Deepseek 调用失败: {e}")
+            print(f"调用失败: {e}")
             return f"API 接口调用失败"
 
     async def decide_to_reply(self, history, message_objs, chat_id):
         """判断是否回复群聊"""
-        """
-            三段式决策：强干预 -> 弱判定 -> 逻辑判定
-            """
         # 1. 更新并获取当前群聊的欲望值
         current_e = self.yuki.update_energy(chat_id)
         self.yuki.update_desire_to_reply(chat_id)
         desire = self.yuki.desire_to_start_topic.get(str(chat_id), 0)
 
-        keywords = ["主人", "哥哥", "Yuki", "yuki"]
         human_calling = any(
             not m["is_bot"] and any(kw in m["raw_text"].lower() for kw in keywords)
             for m in message_objs
@@ -122,7 +118,7 @@ class YukiEngine:
             print(f"[System] 判定消息构建完成，正在发送API请求... (当前精力: {current_e:.1f})")
 
             raw_response = await self.llm.robust_api_call(
-                model="deepseek-v3.2",
+                model=LLM_MODEL,
                 messages=messages,
                 max_tokens=10,
                 temperature=0.6
@@ -143,7 +139,7 @@ class YukiEngine:
         content_to_summarize = json.dumps(dialogue_msgs, ensure_ascii=False)
         try:
             diary_content = await self.llm.robust_api_call(
-                model="deepseek-v3.2",
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": f"{BASE_SETTING}"},
                     {"role": "user", "content": (
@@ -152,11 +148,11 @@ class YukiEngine:
                         f"{SUMMARY_PROMPT}"
                     )}
                 ],
-                temperature=0.7,  # 降低温度，让它说话更稳、更常用
-                top_p=0.8,  # 稍微收窄采样范围，过滤冷门词
+                temperature=0.7,
+                top_p=0.8,
                 frequency_penalty=0.1,  # 极低的惩罚，允许它说大白话
-                presence_penalty=0.0,  # 不强迫它聊新话题
-                max_tokens=200  # 强制短句，短句更容易显自然
+                presence_penalty=0.0,
+                max_tokens=200
             )
             diary_content = re.sub(r'\s*FINISHED\s*$', '', diary_content, flags=re.IGNORECASE)
             diary_content = f"【日记({datetime.datetime.now().strftime("%Y-%m-%d %H:%M")})】：\n{diary_content}"
@@ -204,38 +200,6 @@ class YukiEngine:
                 finally:
                     self.yuki.writing_diary.discard(cid)
 
-
-    async def build_chat_context(self, chat_id: str, combined_text: str, history_dict: dict, mode,relevant_diaries: list[Any]) -> list[dict[str, str | Any]]:
-        # 这里的 diary 现在是字典，我们要取出 ['content']
-        for i, diary_obj in enumerate(reversed(relevant_diaries), 1):
-            content = diary_obj['content']  # 提取文本内容
-            # preview = content[:50] + "..." if len(content) > 100 else content
-            preview = content
-            preview = preview.replace('\n', ' ')
-            print(f"[Diary Debug]回忆 {i}: {preview}")
-
-        # 1. 基础人设
-        system_prompt = history_dict[chat_id][0]["content"] if history_dict[chat_id] and history_dict[chat_id][0][
-            "role"] == "system" else self.yuki.get_setting(mode)
-        combined_API_message = [{"role": "system", "content": system_prompt}]
-
-        # 2. 插入检索到的日记
-        for diary_obj in reversed(relevant_diaries):
-            content = diary_obj['content']  # 提取文本内容
-            combined_API_message.append({"role": "system", "content": f"【回忆】{content}"})
-
-        # --- 调试输出：打印加权分和匹配到的关键词信息 ---
-        for i, diary_obj in enumerate(relevant_diaries[:3], 1):
-            # 打印加权分和匹配到的关键词信息
-            print(f"[RAG-Debug] 回忆 {i} | 得分: {diary_obj['score']:.2f} | 详情: {diary_obj['debug']}")
-
-        # 3. 加入最近KEEP_LAST_DIALOGUE条对话（不包括系统消息）
-        recent_msgs = [msg for msg in history_dict[chat_id][-KEEP_LAST_DIALOGUE - 1:-1] if msg["role"] != "system"]
-        combined_API_message.extend(recent_msgs)
-        combined_API_message.append(
-            {"role": "user", "content": f" (当前时间:{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}){combined_text}"})
-        return combined_API_message
-
     async def ice_break_monitor(self):
         while True:
             await asyncio.sleep(random.randint(600, 1800))
@@ -255,6 +219,7 @@ class YukiEngine:
 
                     # 获取当前的失败次数，默认为 0
                     fail_count = self.yuki.ice_break_fail_count.get(cid, 0)
+                    print(f"[IceBreak] {cid} 破冰失败次数为 {fail_count}")
 
                     # 修改判定条件：只有失败次数 < 2 时才允许破冰
                     if activity < 0.5 and desire > 75 and fail_count < 2:
@@ -280,31 +245,27 @@ class YukiEngine:
 
         # 2. 构造 Query 逻辑 (保持你的原汁原味)
         recent_msgs = history_dict[chat_id][-5:]
-        context_text = "".join([m['content'] for m in recent_msgs if m['role'] == 'user'])
+        context_text = "".join([m['content'] for m in recent_msgs if m['role'] != 'system'])
         now_hour = datetime.datetime.now().hour
-        time_label = "深夜" if 1 <= now_hour <= 5 else "日常"
-        query = f"{time_label}氛围下，关于 {context_text[:30]} 的记忆或有趣瞬间"
+        query = f"{context_text}"
 
         dynamic_top_k = 8 if len(query) > 50 else 5
 
         # 3. RAG 检索
         relevant_diaries = self.rag.search_diaries(query, chat_id=chat_id, top_k=dynamic_top_k)
 
-        # 注意：这里调用的是我们刚刚写好的那个 context 构造函数
         prompt = build_ice_break_prompt(chat_id, relevant_diaries, history_dict)
-
-        # print(f"[Engine Debug] 构建的prompt内容：{prompt}")
 
         print(f"[System] Yuki 正在破冰... (Query: {query})")
         try:
             # 4. API 调用
             Yuki_Answer = await self.llm.robust_api_call(
-                model="deepseek-v3.2",
+                model=LLM_MODEL,
                 messages=prompt,
-                temperature=0.8,  # 降低温度，让它说话更稳、更常用
-                top_p=0.9,  # 稍微收窄采样范围，过滤冷门词
-                frequency_penalty=0.2,  # 极低的惩罚，允许它说大白话
-                max_tokens=60  # 强制短句，短句更容易显自然
+                temperature=0.8,
+                top_p=0.9,
+                frequency_penalty=0.2,
+                max_tokens=60
             )
 
             # 清理与记录
@@ -315,7 +276,7 @@ class YukiEngine:
             history_dict[chat_id].append({"role": "assistant", "content": Yuki_Answer})
             self.history.save(history_dict)
 
-            # 6. 【核心修复】安全地消耗精力
+            # 6. 消耗精力
             async with self.yuki.lock:
                 self.yuki.consume_energy(chat_id)
                 current_energy = self.yuki.energy[chat_id]

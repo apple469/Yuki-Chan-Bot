@@ -2,8 +2,7 @@ import datetime
 import time
 from openai import AsyncOpenAI  # 必须换成这个
 import asyncio
-from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
-
+from config import BACKUP_API_KEY, DEEPSEEK_BASE_URL, BACKUP_MODEL
 
 class ApiCall:
     def __init__(self, api_key, base_url):
@@ -31,9 +30,9 @@ class ApiCall:
 
             # 如果处于熔断状态，或者这不是第一次尝试（说明主线路可能抖动）
             if self.is_degraded or attempt > 0:
-                current_client = AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
-                current_model = "deepseek-chat"
-                print("[Critical] 主线路异常，本次请求切换至DEEPSEEK官方线路")
+                current_client = AsyncOpenAI(api_key=BACKUP_API_KEY, base_url=DEEPSEEK_BASE_URL)
+                current_model = BACKUP_MODEL
+                print("[Critical] 主线路异常，本次请求切换至备用线路")
 
                 # 仅在第一次从主线路切换到备用线路时打印提示
                 if not self.is_degraded and attempt > 0:

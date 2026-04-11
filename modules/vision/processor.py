@@ -6,10 +6,10 @@ import aiohttp
 import cv2
 import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
-from config import MAX_CONCURRENT_MEME, TEATOP_API_KEY, TEATOP_API_URL, REQUEST_TIMEOUT
+from config import MAX_CONCURRENT_MEME, LLM_API_KEY, IMAGE_PROCESS_API_URL, REQUEST_TIMEOUT,VISION_MODEL
+from core.prompts import VISION_PROMPT
 from modules.vision.utils import log
 from modules.vision.cache import MemeCache
-
 
 class MemeProcessor:
     def __init__(self):
@@ -59,21 +59,21 @@ class MemeProcessor:
         reraise=True
     )
     async def call_api(self, b64_data):
-        print(f"token:{TEATOP_API_KEY[:10]}, url:{TEATOP_API_URL}")
+        print(f"token:{LLM_API_KEY[:10]}, url:{IMAGE_PROCESS_API_URL}")
         headers = {
-            "Authorization": f"Bearer {TEATOP_API_KEY}",
+            "Authorization": f"Bearer {LLM_API_KEY}",
             "Content-Type": "application/json"
         }
         #Qwen/Qwen3-VL-8B-Instruct
         payload = {
-            "model": "qwen3-vl-flash",
+            "model": VISION_MODEL,
             "messages": [
                 {
                     "role": "user",
                     "content": [
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}},
                         {"type": "text",
-                         "text": "用词或短句描述这个群友发的表情包的描述或表达的情感，不超过15个字。带文字图片输出文字。长段文字直接输出“长段文字”"}
+                         "text": VISION_PROMPT}
                     ]
                 }
             ],
@@ -81,7 +81,7 @@ class MemeProcessor:
             "temperature": 0.75
         }
         async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
-            async with session.post(TEATOP_API_URL, json=payload, headers=headers) as resp:
+            async with session.post(IMAGE_PROCESS_API_URL, json=payload, headers=headers) as resp:
                 print(f"[DEBUG] 响应状态码: {resp.status}")
                 if resp.status == 200:
                     result = await resp.json()
@@ -98,10 +98,16 @@ class MemeProcessor:
                     )
 
     async def understand_from_url(self, img_url, llm):
+
+        if not VISION_MODEL:
+            print("未设置视觉模型，跳过图像识别")
+            # 如果没有配置视觉模型，直接返回占位符，不进行下载和API调用
+            return "[未知动画表情]"
+
         # 1. 熔断拦截
         llm.check_auto_recovery()
         if llm.is_degraded:
-            return "[动画表情]"
+            return "[未知动画表情]"
 
         # 2. 缓存处理
         img_url = img_url.replace("&amp;", "&")
@@ -118,7 +124,7 @@ class MemeProcessor:
                 async with session.get(img_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                     if resp.status != 200:
                         print(f"[Meme Understanding] 下载失败，HTTP {resp.status}")
-                        return "[动画表情]"
+                        return "[未知动画表情]"
                     content = await resp.read()
 
             img_hash = self.get_image_hash(content)
@@ -132,7 +138,7 @@ class MemeProcessor:
             print("[MemeCache] 开始压缩...")
             b64_data = self.compress_image(content)
             if not b64_data:
-                return "[动画表情]"
+                return "[未知动画表情]"
 
             print("[Meme Understanding] 发送AI请求...")
             async with self.semaphore:
@@ -151,7 +157,7 @@ class MemeProcessor:
 
         except Exception as e:
             print(f"[Meme ERROR] 理解表情失败: {e}")
-            return "[动画表情]"
+            return "[未知动画表情]"
 
     @staticmethod
     def extract_urls_from_text(text):
