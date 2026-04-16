@@ -19,11 +19,12 @@ KEEP_LAST_DIALOGUE = 10                     # 保留最近对话条数（短期�
 # ================= API配置 =================
 LLM_BASE_URL = "https://api.ytea.top/v1"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-IMAGE_PROCESS_API_URL = "https://api.ytea.top/v1/chat/completions"
+IMAGE_PROCESS_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 
 BACKUP_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 LLM_API_KEY = os.getenv("LLM_API_KEY", "").strip()
-IMAGE_PROCESS_API_KEY = os.getenv("IMAGE_PROCESS_API_KEY", "").strip()
+# IMAGE_PROCESS_API_KEY = os.getenv("IMAGE_PROCESS_API_KEY", "").strip()
+IMAGE_PROCESS_API_KEY = "sk-780c39897d9242edb5efe4fe3799974b"
 MASTER_NAME = os.getenv("MASTER_NAME", "主人") # 默认叫主人，也可以改
 
 # 主对话模型 (例如: deepseek-chat, gpt-4o)
@@ -35,7 +36,7 @@ BACKUP_MODEL = "deepseek-chat"
 #VISION_MODEL = ""
 VISION_MODEL = "qwen3-vl-flash"
 
-ROBOT_NAME = os.getenv("ROBOT_NAME", "Yuki")
+ROBOT_NAME = os.getenv("ROBOT_NAME", "yuki").lower()
 
 # ================= 连接配置 =================
 NAPCAT_WS_URL = "ws://127.0.0.1:3001"
@@ -79,9 +80,10 @@ DECAY_LEVEL = 0.6
 SIGMOID_CENTRE = 50.00
 SIGMOID_ALPHA = 0.08
 
-keywords = ["主人", "哥哥", f"{ROBOT_NAME}"]
+keywords = ["主人", "哥哥", ROBOT_NAME]
 # ================= 并发配置 =================
 MAX_CONCURRENT_MEME = 1
 
 # ================= 调试配置 =================
 DEBUG = True
+

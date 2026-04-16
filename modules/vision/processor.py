@@ -6,7 +6,8 @@ import aiohttp
 import cv2
 import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
-from config import MAX_CONCURRENT_MEME, LLM_API_KEY, IMAGE_PROCESS_API_URL, REQUEST_TIMEOUT,VISION_MODEL
+from config import MAX_CONCURRENT_MEME, LLM_API_KEY, IMAGE_PROCESS_API_URL, REQUEST_TIMEOUT, VISION_MODEL, \
+    IMAGE_PROCESS_API_KEY
 from core.prompts import VISION_PROMPT
 from modules.vision.utils import log
 from modules.vision.cache import MemeCache
@@ -59,9 +60,9 @@ class MemeProcessor:
         reraise=True
     )
     async def call_api(self, b64_data):
-        print(f"token:{LLM_API_KEY[:10]}, url:{IMAGE_PROCESS_API_URL}")
+        print(f"token:{IMAGE_PROCESS_API_KEY}, url:{IMAGE_PROCESS_API_URL}")
         headers = {
-            "Authorization": f"Bearer {LLM_API_KEY}",
+            "Authorization": f"Bearer {IMAGE_PROCESS_API_KEY}",
             "Content-Type": "application/json"
         }
         #Qwen/Qwen3-VL-8B-Instruct

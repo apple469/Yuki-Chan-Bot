@@ -13,7 +13,7 @@ OFFICIAL_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 OFFICIAL_URL = "https://api.deepseek.com/v1/chat/completions"
 
 # 2. TeaTop 站配置 (刚才表现最好的 v3.2)
-TEATOP_KEY = os.getenv("TEATOP_API_KEY", "").strip()
+TEATOP_KEY = os.getenv("LLM_API_KEY", "").strip()
 TEATOP_URL = "https://api.ytea.top/v1/chat/completions"
 
 TEST_PROMPT = "你是 Yuki，一个亲昵黏人的电子妹妹，称呼我为哥哥大人。现在请用一句话简短地向我问好，要体现出你很想我的样子。"

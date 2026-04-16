@@ -123,4 +123,4 @@ if __name__ == "__main__":
 
     quick_setup(current_mode)
 
-    print("向导结束，请到config.py文件中手动修改使用模型名称！")
+    print("向导结束，请到config.py文件中手动修改使用模型名称和请求地址！")

@@ -6,7 +6,7 @@ import time
 from dotenv import load_dotenv
 
 load_dotenv()
-TEATOP_API_KEY = os.getenv("TEATOP_API_KEY", "").strip()
+TEATOP_API_KEY = os.getenv("LLM_API_KEY", "").strip()
 BASE_URL = "https://api.ytea.top/v1/chat/completions"
 
 # 专注测试刚才表现优异和有潜力的选手

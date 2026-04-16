@@ -6,7 +6,7 @@ import chromadb
 import jieba.analyse
 from sentence_transformers import SentenceTransformer
 
-from config import EMBED_MODEL, VECTOR_DB_PATH, RETRIEVAL_TOP_K
+from config import EMBED_MODEL, VECTOR_DB_PATH, RETRIEVAL_TOP_K, ROBOT_NAME
 
 
 class MemoryRAG:
@@ -36,7 +36,7 @@ class MemoryRAG:
         """从文件加载屏蔽词，支持自动去重和过滤空行"""
         if not os.path.exists(self.blacklist_path):
             # 如果文件不存在，创建一个默认的
-            default_list = ['yuki', '主人', '哥哥', '池宇健', '人家']
+            default_list = [ROBOT_NAME, '主人', '哥哥', '池宇健', '人家']
             with open(self.blacklist_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(default_list))
             return default_list
