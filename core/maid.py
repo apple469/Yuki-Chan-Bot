@@ -1,21 +1,12 @@
-
-# core/maid.py
-import ollama
 import json
 import subprocess
-import os  # 确保导入 os 库
+import os
 from datetime import datetime
 import asyncio
 import re
 import aiohttp
-import json
 from config import LLM_API_KEY, LLM_BASE_URL
-
-import asyncio
-import json
-import re
 from network.api_request import ApiCall
-from config import LLM_API_KEY, LLM_BASE_URL
 
 # 初始化全局稳健客户端
 # 它内部已经处理了主线与备线的切换逻辑
