@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 from dotenv import load_dotenv, set_key
@@ -31,13 +32,23 @@ def ensure_files():
         print("🛡️ 已存在 .gitignore ，跳过")
 
 def install_requirements():
-    """自动安装依赖"""
-    if input("\n是否现在安装/更新依赖插件? (y/n): ").lower() == 'y':
-        try:
+    """自动安装依赖（优先使用 uv，回退到 pip）"""
+    if input("\n是否现在安装/更新依赖插件? (y/n): ").lower() != 'y':
+        return
+
+    has_uv = shutil.which("uv") is not None
+    try:
+        if has_uv:
+            print("🚀 检测到 uv，使用 uv 安装依赖...")
+            subprocess.check_call(["uv", "sync"])
+            print("✅ 依赖安装完成（via uv）")
+        else:
+            print("📦 未检测到 uv，使用 pip 安装依赖...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-            print("✅ 依赖安装完成")
-        except Exception as e:
-            print(f"❌ 依赖安装失败，请手动执行 pip install -r requirements.txt\n错误: {e}")
+            print("✅ 依赖安装完成（via pip）")
+    except Exception as e:
+        print(f"❌ 依赖安装失败\n错误: {e}")
+        print("💡 建议手动执行: uv sync  或  pip install -r requirements.txt")
 
 def config_env_key(mode):
     env_path = ".env"

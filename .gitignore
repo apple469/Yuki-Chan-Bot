@@ -12,3 +12,4 @@ skills/
 core/skills
 logs/
 core/tasks
+.venv/
