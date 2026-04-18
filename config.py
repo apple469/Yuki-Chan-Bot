@@ -27,7 +27,7 @@ IMAGE_PROCESS_API_KEY = os.getenv("IMAGE_PROCESS_API_KEY", "").strip()
 MASTER_NAME = os.getenv("MASTER_NAME", "主人") # 默认叫主人，也可以改
 
 # 主对话模型 (例如: deepseek-chat, gpt-4o)
-LLM_MODEL = "deepseek-v3.2"
+LLM_MODEL = "ERNIE-4.0-8K-Preview"
 BACKUP_MODEL = "deepseek-chat"
 
 # 图像分析模型 (如果有专门的视觉模型需求)
