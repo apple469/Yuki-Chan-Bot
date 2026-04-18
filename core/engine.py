@@ -322,12 +322,9 @@ async def maid_worker(engine, yuki_state, sender, history_manager):
         print(f"🧹 小女仆开始后台工作: {goal} (chat_id: {chat_id})")
 
         # 非阻塞执行（线程池运行同步的 ollama 循环）
-        loop = asyncio.get_running_loop()
-        result_dict = await loop.run_in_executor(
-            yuki_state.maid_executor,
-            maid_evolution_loop,
-            goal,
-            chat_id
+        result_dict = await maid_evolution_loop(
+            user_goal=goal,
+            chat_id=chat_id
         )
 
         # 清除任务状态
@@ -349,7 +346,7 @@ async def maid_worker(engine, yuki_state, sender, history_manager):
 
             # 2. 把小女仆汇报作为 assistant 消息写入历史（这样 Yuki 下次看到的就是“自己”的汇报）
             history_dict[chat_id].append({
-                "role": "assistant",
+                "role": "user",
                 "content": report,
                 "time": current_time_str,
                 "is_maid_report": True   # 可选标记，方便以后过滤
