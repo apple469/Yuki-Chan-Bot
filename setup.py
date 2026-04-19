@@ -20,6 +20,14 @@ def ensure_files():
             f.write("yuki\n主人\n哥哥\n池宇健\n人家")
         print("已生成初始 blacklist.txt")
     else:
+        print("📝 已存在 blacklist.txt，跳过")
+
+    # 2. 自动生成 .gitignore 防止误传密钥
+    if not os.path.exists(".gitignore"):
+        with open(".gitignore", "w", encoding="utf-8") as f:
+            f.write(".env\n__pycache__/\n*.log\nmodels/\n/yuki_memory/\n.vscode/")
+        print("🛡️ 已生成 .gitignore（保护你的 API Key）")
+    else:
         print("已存在 blacklist.txt，跳过")
 
 def install_requirements():
@@ -31,7 +39,7 @@ def install_requirements():
         except Exception as e:
             print(f"依赖安装失败，请手动执行 pip install -r requirements.txt\n错误: {e}")
 
-def config_env_key():
+def config_env_key(mode):
     env_path = ".env"
     if not os.path.exists(env_path):
         with open(env_path, "w", encoding="utf-8") as f:
@@ -39,24 +47,24 @@ def config_env_key():
 
     keys_to_configure = [
         ("LLM_API_KEY", "请输入首选 LLM API Key: ", ""),
-        ("BACKUP_API_KEY", "请输入备选 LLM API Key: ", ""),
+        ("BACKUP_API_KEY", "请输入备选 LLM API Key: （未选择的话可以继续用上面的）", ""),
         ("IMAGE_PROCESS_API_KEY", "请输入 图像处理 API Key: ", ""),
         ("NAPCAT_WS_URL", "请输入 NapCat WebSocket 地址 (默认: ws://127.0.0.1:3001): ", "ws://127.0.0.1:3001")
     ]
 
     for key, prompt, default in keys_to_configure:
         load_dotenv()
-        if not os.getenv(key):
+        if mode == 1 or not os.getenv(key):
             value = input(prompt).strip()
             save_value = value if value else default
             if save_value:
                 set_key(env_path, key, save_value)
                 print(f"{key} 已保存: {save_value}")
         else:
-            print(f"{key} 已存在，跳过")
+            print(f"{key} 已存在，跳过(模式: 刷新)")
 
 
-def config_bot_settings():
+def config_bot_settings(mode):
     """配置机器人身份及目标对话对象"""
     env_path = ".env"
     settings = [
@@ -69,7 +77,7 @@ def config_bot_settings():
     for key, prompt in settings:
         load_dotenv()
         # 修改点：同上
-        if not os.getenv(key):
+        if mode == 1 or not os.getenv(key):
             value = input(prompt).strip()
             if value:
                 set_key(env_path, key, value)
@@ -77,19 +85,22 @@ def config_bot_settings():
         else:
             print(f"{key} 已存在，跳过")
 
-def quick_setup():
+def quick_setup(mode):
     print("\n>>> 步骤 1: 建立文件夹结构")
     ensure_dirs()
     ensure_files()
+    # 建立黑名单等必要文件
+    if not os.path.exists("blacklist.txt"):
+        with open("blacklist.txt", "w", encoding="utf-8") as f: f.write("")
 
     print("\n>>> 步骤 2: 安装依赖文件")
     install_requirements()
 
     print("\n>>> 步骤 3: 配置 API 密钥")
-    config_env_key()
+    config_env_key(mode)
 
     print("\n>>> 步骤 4: 配置机器人 QQ 号")
-    config_bot_settings()
+    config_bot_settings(mode)
 
     # 2. 配置 RAG 嵌入模型
     print("\n>>> 步骤 5: 下载 RAG 嵌入模型")
@@ -103,5 +114,12 @@ def quick_setup():
 
 if __name__ == "__main__":
     print("开始配置必要参数和环境")
-    quick_setup()
-    print("向导结束，请到 config.py 文件中手动修改使用模型名称和请求地址！")
+    try:
+        user_input = input("输入配置方式（刷新（跳过已存在）和写入（全部覆盖））[默认 0]: ").strip()
+        current_mode = int(user_input) if user_input else 0
+    except ValueError:
+        current_mode = 0
+
+    quick_setup(current_mode)
+
+    print("向导结束，请到config.py文件中手动修改使用模型名称和请求地址！")
