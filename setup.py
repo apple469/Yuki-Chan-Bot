@@ -1,7 +1,17 @@
 import os
+import shutil
 import subprocess
 import sys
 from dotenv import load_dotenv, set_key
+
+# uv 环境提示：如果检测到 uv 但未在虚拟环境中运行，给出友好提示
+if shutil.which("uv") and sys.prefix == sys.base_prefix:
+    venv_python = os.path.join(".venv", "Scripts", "python.exe") if sys.platform == "win32" else os.path.join(".venv", "bin", "python")
+    if os.path.exists(venv_python):
+        print("💡 检测到 uv 虚拟环境存在，但未激活。")
+        print("   请使用以下命令运行 setup.py：")
+        print(f"   uv run python setup.py")
+        print("   或先激活虚拟环境后再运行。\n")
 
 def ensure_dirs():
     """确保必要的文件夹存在"""
@@ -31,13 +41,23 @@ def ensure_files():
         print("🛡️ 已存在 .gitignore ，跳过")
 
 def install_requirements():
-    """自动安装依赖"""
-    if input("\n是否现在安装/更新依赖插件? (y/n): ").lower() == 'y':
-        try:
+    """自动安装依赖（优先使用 uv，回退到 pip）"""
+    if input("\n是否现在安装/更新依赖插件? (y/n): ").lower() != 'y':
+        return
+
+    has_uv = shutil.which("uv") is not None
+    try:
+        if has_uv:
+            print("🚀 检测到 uv，使用 uv 安装依赖...")
+            subprocess.check_call(["uv", "sync"])
+            print("✅ 依赖安装完成（via uv）")
+        else:
+            print("📦 未检测到 uv，使用 pip 安装依赖...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-            print("✅ 依赖安装完成")
-        except Exception as e:
-            print(f"❌ 依赖安装失败，请手动执行 pip install -r requirements.txt\n错误: {e}")
+            print("✅ 依赖安装完成（via pip）")
+    except Exception as e:
+        print(f"❌ 依赖安装失败\n错误: {e}")
+        print("💡 建议手动执行: uv sync  或  pip install -r requirements.txt")
 
 def config_env_key(mode):
     env_path = ".env"
@@ -105,10 +125,12 @@ def quick_setup(mode):
 
     # 2. 配置 RAG 嵌入模型
     print("\n>>> 步骤 5: 下载 RAG 嵌入模型")
-    print("正在加载程序")
-    from utils.download_model import download_model
     try:
+        from utils.download_model import download_model
         download_model()
+    except ImportError as e:
+        print(f"⚠️ 依赖未安装，跳过模型下载: {e}")
+        print("   请确保已运行 'uv sync' 或 'pip install -r requirements.txt'")
     except Exception as e:
         print(f"❌ 模型下载环节出现问题: {e}")
 
