@@ -176,7 +176,7 @@ class YukiEngine:
                 max_tokens=200
             )
             diary_content = re.sub(r'\s*FINISHED\s*$', '', diary_content, flags=re.IGNORECASE)
-            diary_content = f"【日记({datetime.datetime.now().strftime("%Y-%m-%d %H:%M")})】：\n{diary_content}"
+            diary_content = f"【日记({datetime.datetime.now().strftime('%Y-%m-%d %H:%M')})】：\n{diary_content}"
             self.rag.save_diary(diary_content, chat_id=chat_id)
             logger.info(f"[System] 日记已存入记忆库：{diary_content}")
 
