@@ -14,26 +14,27 @@ from modules.vision.processor import MemeProcessor
 from network.ws_connection import BotConnector
 from network.ws_sender import MessageSender
 from network.api_request import ApiCall
-from config import *
+from config import cfg
+import os
 from utils.logger import setup_logging, get_logger
 
-setup_logging()
+setup_logging(debug=cfg.DEBUG)
 logger = get_logger("main")
 # 初始化全局变量：消息缓冲和定时任务
-real_time_debounce_time = DEBOUNCE_TIME
+real_time_debounce_time = cfg.DEBOUNCE_TIME
 
 def check_config():
     """在启动前进行最后的物理检查"""
-    if not os.path.exists(".env"):
+    if not os.path.exists("configs/config.yaml"):
         env_choice = input("检测到尚未进行基础配置，是否现在运行配置向导？(y/n): ")
         if env_choice.lower() == 'y':
             from setup import quick_setup
             quick_setup(0)  # 以刷新模式运行
         else:
-            logger.warning("请手动运行 python quick_setup.py 后再启动。")
+            logger.warning("请手动运行 python setup.py 后再启动。")
             sys.exit(0)
 
-    required_files = [".env", "blacklist.txt", "./models/text2vec-base-chinese/config.json"]
+    required_files = ["configs/config.yaml", "blacklist.txt", "./models/text2vec-base-chinese/config.json"]
     for f in required_files:
         if not os.path.exists(f):
             # 抛出异常，触发下面的错误引导
@@ -46,7 +47,7 @@ async def main_process(chat_id, mode, debounce_flag=True, force_reply=None):
         await asyncio.sleep(real_time_debounce_time)  # 防抖等待，合并短时间内的多条消息
     else:
         await asyncio.sleep(0.5)
-    real_time_debounce_time = DEBOUNCE_TIME  # 重置防抖时间，准备处理下一轮消息
+    real_time_debounce_time = cfg.DEBOUNCE_TIME  # 重置防抖时间，准备处理下一轮消息
     message_objs = yuki.pop_buffer(chat_id)  # 此时拿到的是 list[dict]
     if not message_objs and not force_reply:
         return
@@ -125,7 +126,7 @@ async def main_process(chat_id, mode, debounce_flag=True, force_reply=None):
     logger.info("[System] 保存完成")
 
     # 日记触发检查：如果历史过长，强制写日记
-    if len(history_dict[chat_id]) > DIARY_MAX_LENGTH:
+    if len(history_dict[chat_id]) > cfg.DIARY_MAX_LENGTH:
         summarized_list = await engine.do_summarize(chat_id, history_dict[chat_id])
         history_dict[chat_id] = summarized_list
         history_manager.save(history_dict)
@@ -155,13 +156,13 @@ async def napcat_listen(mode):
                 raw_msg = data.get("raw_message")
                 user_id = data.get("user_id")
 
-                if mode == "private" and msg_type == "private" and user_id == TARGET_QQ:
+                if mode == "private" and msg_type == "private" and user_id == cfg.TARGET_QQ:
                     await manage_buffer(user_id, raw_msg, mode)
 
                 elif mode == "group" and msg_type == "group":
                     group_id = data.get("group_id")
                     # 检查目标群白名单
-                    if not TARGET_GROUPS or group_id in TARGET_GROUPS:
+                    if not cfg.TARGET_GROUPS or group_id in cfg.TARGET_GROUPS:
                         sender_info = data.get("sender", {})
                         name = sender_info.get("card") or sender_info.get("nickname") or "路人"
                         # 将消息存入缓冲区并触发主进程
@@ -190,12 +191,12 @@ async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''
         yuki.ice_break_fail_count[cid_str] = 0
 
     if real_time_debounce_time <= 0:
-        real_time_debounce_time = DEBOUNCE_TIME  # 重置防抖时间，避免长时间关闭防抖导致过度频繁响应
+        real_time_debounce_time = cfg.DEBOUNCE_TIME  # 重置防抖时间，避免长时间关闭防抖导致过度频繁响应
 
     cid_str = str(chat_id)
     yuki.last_message_time[str(cid_str)] = time.time()
 
-    content = smart_truncate(content, max_len=MAX_MESSAGE_LENGTH, suffix='...')
+    content = smart_truncate(content, max_len=cfg.MAX_MESSAGE_LENGTH, suffix='...')
 
     # --- 拦截帮助指令并存入历史 ---
     if raw_message in ['help', '/help', 'yuki帮助', 'yuki功能', '帮助', '功能']:
@@ -219,7 +220,7 @@ async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''
         "is_bot": is_bot
     })
 
-    if ROBOT_NAME.lower() in raw_message.lower():  # 使用原始文本判断，更准确
+    if cfg.ROBOT_NAME.lower() in raw_message.lower():  # 使用原始文本判断，更准确
         real_time_debounce_time = 5
     if chat_id in yuki.buffer_tasks: yuki.buffer_tasks[chat_id].cancel()
     yuki.buffer_tasks[chat_id] = asyncio.create_task(main_process(chat_id, mode))
@@ -231,7 +232,7 @@ if __name__ == "__main__":
         start_time = time.time()
 
         # 加载与Napcat通信的Websocket服务
-        connector = BotConnector(NAPCAT_WS_URL)
+        connector = BotConnector(cfg.NAPCAT_WS_URL)
         # 实例化消息发送器
         sender = MessageSender(connector)
         # 实例化CQ码处理器
@@ -241,7 +242,7 @@ if __name__ == "__main__":
         # 实例化Yuki状态
         yuki = YukiState()
         # 实例化LLM请求器
-        llm = ApiCall(LLM_API_KEY, LLM_BASE_URL)
+        llm = ApiCall(cfg.LLM_API_KEY, cfg.LLM_BASE_URL)
         # 实例化历史记录管理器
         history_manager = HistoryManager()
         logger.info("[System] 开始初始化记忆系统（RAG）...")
@@ -259,7 +260,7 @@ if __name__ == "__main__":
         if choice != "2":
             # 初始化巡检名单，预载历史中的群聊ID和最后消息时间，确保后台检查能正常工作
             h_dict = history_manager.load()
-            for cid in TARGET_GROUPS:
+            for cid in cfg.TARGET_GROUPS:
                 yuki.last_message_time[str(cid)] = time.time()
                 current_e = yuki.update_energy(str(cid))
                 yuki.update_desire_to_reply(str(cid))

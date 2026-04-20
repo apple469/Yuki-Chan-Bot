@@ -7,7 +7,7 @@ import datetime
 import time
 from typing import Any
 from core.prompts import BASE_SETTING, SUMMARY_PROMPT, build_chat_context
-from config import *
+from config import cfg
 from core.prompts import build_ice_break_prompt
 from core.maid import maid_evolution_loop
 from utils.logger import get_logger
@@ -39,7 +39,7 @@ class YukiEngine:
         logger.info("[System] Yuki 正在打字...")
         try:
             Yuki_Answer = await self.llm.robust_api_call(
-                model=LLM_MODEL,
+                model=cfg.LLM_MODEL,
                 messages=combined_API_message,
                 temperature=0.7,  # 降低温度，让它说话更稳、更常用
                 top_p=0.75,  # 稍微收窄采样范围，过滤冷门词
@@ -76,14 +76,14 @@ class YukiEngine:
             return True
 
         human_calling = any(
-            not m["is_bot"] and any(kw in m["raw_text"].lower() for kw in keywords)
+            not m["is_bot"] and any(kw in m["raw_text"].lower() for kw in cfg.keywords)
             for m in message_objs
         )
 
         # B. 检查是否【只有机器人】在艾特 Yuki（循环风险）
         bot_calling_only = all(
             m["is_bot"] for m in message_objs
-            if any(kw in m["raw_text"].lower() for kw in keywords)
+            if any(kw in m["raw_text"].lower() for kw in cfg.keywords)
         )
 
         # 逻辑干预：
@@ -91,7 +91,7 @@ class YukiEngine:
             logger.info("[System] 检测到人类关键召唤，Yuki 强制清醒")
             return True
 
-        if bot_calling_only and any(any(kw in m["raw_text"].lower() for kw in keywords) for m in message_objs):
+        if bot_calling_only and any(any(kw in m["raw_text"].lower() for kw in cfg.keywords) for m in message_objs):
             desire *= 0.7  # 你的核心诉求：欲望乘 0.7
             logger.info(f"[System] 检测到仅有 BOT 在召唤 Yuki，为了防止无限套娃，本次放行。欲望打折：{desire:.1}%")
 
@@ -103,7 +103,7 @@ class YukiEngine:
             logger.info(f"[Decision] {chat_id} 欲望低迷({desire}%)，拒绝营业。")
             return False
 
-        if current_e < MIN_ACTIVE_ENERGY:
+        if current_e < cfg.MIN_ACTIVE_ENERGY:
             logger.info(f"[System] Yuki 太累了... 正在潜水回复体力 (当前精力: {current_e:.1f})")
             return False
 
@@ -130,7 +130,7 @@ class YukiEngine:
                     f"最近对话内容：\n{dialogue_text}\n\n"
                     f"--- 自身状态 ---\n"
                     f"精力值：{current_e:.1f}/100 ({energy_desc})\n"
-                    f"发言消耗{COST_PER_REPLY}点精力\n\n"
+                    f"发言消耗{cfg.COST_PER_REPLY}点精力\n\n"
                     f"--- 决策指令 ---\n"
                     f"{check_prompt}"
                 )}
@@ -139,7 +139,7 @@ class YukiEngine:
             logger.info(f"[System] 判定消息构建完成，正在发送API请求... (当前精力: {current_e:.1f})")
 
             raw_response = await self.llm.robust_api_call(
-                model=LLM_MODEL,
+                model=cfg.LLM_MODEL,
                 messages=messages,
                 max_tokens=10,
                 temperature=0.6
@@ -160,7 +160,7 @@ class YukiEngine:
         content_to_summarize = json.dumps(dialogue_msgs, ensure_ascii=False)
         try:
             diary_content = await self.llm.robust_api_call(
-                model=LLM_MODEL,
+                model=cfg.LLM_MODEL,
                 messages=[
                     {"role": "system", "content": f"{BASE_SETTING}"},
                     {"role": "user", "content": (
@@ -180,7 +180,7 @@ class YukiEngine:
             self.rag.save_diary(diary_content, chat_id=chat_id)
             logger.info(f"[System] 日记已存入记忆库：{diary_content}")
 
-            return [msg for msg in history if msg["role"] == "system"] + dialogue_msgs[-KEEP_LAST_DIALOGUE:]
+            return [msg for msg in history if msg["role"] == "system"] + dialogue_msgs[-cfg.KEEP_LAST_DIALOGUE:]
 
         except Exception as e:
             logger.error(f"[System ERROR] 写日记失败: {e}")
@@ -200,7 +200,7 @@ class YukiEngine:
 
                 # 计算空闲时间
                 idle_seconds = now - last_msg
-                if idle_seconds < DIARY_IDLE_SECONDS:
+                if idle_seconds < cfg.DIARY_IDLE_SECONDS:
                     continue  # 空闲时间不足
 
                 # 检查对话轮数
@@ -208,7 +208,7 @@ class YukiEngine:
                     continue
                 non_system_msgs = [msg for msg in history_dict[cid] if msg["role"] != "system"]
                 non_system_count = len(non_system_msgs)
-                if non_system_count < DIARY_MIN_TURNS:
+                if non_system_count < cfg.DIARY_MIN_TURNS:
                     continue  # 轮数不足
 
                 # 满足条件，触发写日记
@@ -224,7 +224,7 @@ class YukiEngine:
     async def ice_break_monitor(self):
         while True:
             await asyncio.sleep(random.randint(600, 1800))
-            target_list = [str(gid) for gid in TARGET_GROUPS]
+            target_list = [str(gid) for gid in cfg.TARGET_GROUPS]
             logger.info(f"已加载{len(target_list)}条数据")
             pending_ice_break = []
 
@@ -281,7 +281,7 @@ class YukiEngine:
         try:
             # 4. API 调用
             Yuki_Answer = await self.llm.robust_api_call(
-                model=LLM_MODEL,
+                model=cfg.LLM_MODEL,
                 messages=prompt,
                 temperature=0.8,
                 top_p=0.9,

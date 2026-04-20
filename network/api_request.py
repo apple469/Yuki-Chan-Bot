@@ -3,7 +3,7 @@ import time
 import asyncio
 import aiohttp
 import json
-from config import BACKUP_API_KEY, DEEPSEEK_BASE_URL, BACKUP_MODEL
+from config import cfg
 from utils.logger import get_logger
 
 logger = get_logger("api_request")
@@ -101,10 +101,10 @@ class ApiCall:
         # 策略 2: 备用线路 (官方)
         # 官方线路极稳，给 40 秒长超时确保能拿到回复
         # 修正 URL 拼接：官方 Base 一般是 https://api.deepseek.com/v1
-        official_url = DEEPSEEK_BASE_URL.rstrip('/')
+        official_url = cfg.DEEPSEEK_BASE_URL.rstrip('/')
 
         success, result = await self._raw_post(
-            official_url, BACKUP_API_KEY, BACKUP_MODEL, messages, 40, **kwargs
+            official_url, cfg.BACKUP_API_KEY, cfg.BACKUP_MODEL, messages, 40, **kwargs
         )
 
         if success:

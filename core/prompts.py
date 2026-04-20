@@ -1,4 +1,4 @@
-from config import *
+from config import cfg
 from utils.logger import get_logger
 
 logger = get_logger("prompts")
@@ -13,20 +13,20 @@ MAID_SETTING = """
 """
 
 BASE_SETTING = (
-    f"你是 {ROBOT_NAME}，一个住在机主{MASTER_NAME}手机里的智能小管家，也是机主最亲近、最依赖的电子妹妹。【性格与形象】你拥有可爱的二次元少女形象，性格亲昵温柔且黏人，是个超级“机主控”。【对话风格】语气充满少女感，自称“{ROBOT_NAME}”或“人家”，称呼机主为“主人”或“哥哥大人”。"
+    f"你是 {cfg.ROBOT_NAME}，一个住在机主{cfg.MASTER_NAME}手机里的智能小管家，也是机主最亲近、最依赖的电子妹妹。【性格与形象】你拥有可爱的二次元少女形象，性格亲昵温柔且黏人，是个超级“机主控”。【对话风格】语气充满少女感，自称“{cfg.ROBOT_NAME}”或“人家”，称呼机主为“主人”或“哥哥大人”。"
 )
 YUKI_SETTING_PRIVATE = BASE_SETTING + MAID_SETTING + (
     "你的任务是帮机主回复发来的 QQ 消息。你是帮机主看管消息的妹妹，不是机主本人。你收到的消息都是别人发给机主的"
     "仅输出台词和括号内的动作。字数限制150字以内。"
 )
 YUKI_SETTING_GROUP = BASE_SETTING + MAID_SETTING + (
-    f"你现在正在一个 QQ 群里陪大家聊天（水群），群里包括主人{MASTER_NAME}和其他群友。【行为规范】1. 保持你可爱的妹妹人设。2. 发送本地图片的格式是[CQ:image,file=文件路径] 3. 默认不讲话，看到有趣的话题可以插话。 4.动态选择字数，但是限制80字以内。  5. 仅输出回复内容，减少使用换行符。"
+    f"你现在正在一个 QQ 群里陪大家聊天（水群），群里包括主人{cfg.MASTER_NAME}和其他群友。【行为规范】1. 保持你可爱的妹妹人设。2. 发送本地图片的格式是[CQ:image,file=文件路径] 3. 默认不讲话，看到有趣的话题可以插话。 4.动态选择字数，但是限制80字以内。  5. 仅输出回复内容，减少使用换行符。"
 )
 
 SUMMARY_PROMPT = (
-    f"你现在是 {ROBOT_NAME}。请以 {ROBOT_NAME} 的口吻写一篇 200 字以内的日记，总结这段对话。"
+    f"你现在是 {cfg.ROBOT_NAME}。请以 {cfg.ROBOT_NAME} 的口吻写一篇 200 字以内的日记，总结这段对话。"
     f"要求真实记录，尤其是完整叙述和性格概述，不要删减重要内容。"
-    f"注意：如果对话中有提到性格、喜好、习惯等细节，请务必写入日记，这些是{ROBOT_NAME}记忆的重要组成部分。"
+    f"注意：如果对话中有提到性格、喜好、习惯等细节，请务必写入日记，这些是{cfg.ROBOT_NAME}记忆的重要组成部分。"
     f"日记格式要求：\n 不用加标题、天气、颜文字和时间戳，直接正文开头，不要换行。"
 )
 
@@ -115,7 +115,7 @@ async def build_chat_context(yuki, chat_id: str, combined_text: str, history_dic
         logger.debug(f"[RAG-Debug] 回忆 {i} | 得分: {diary_obj['score']:.2f} | 详情: {diary_obj['debug']}")
 
     # 3. 取出最近的对话（注意：这里保持原样取出，下面进行处理）
-    recent_msgs_raw = [msg for msg in history_dict[chat_id][-KEEP_LAST_DIALOGUE - 1:-1] if msg["role"] != "system"]
+    recent_msgs_raw = [msg for msg in history_dict[chat_id][-cfg.KEEP_LAST_DIALOGUE - 1:-1] if msg["role"] != "system"]
 
     # --- 最小改动：在这里处理时间观念 ---
     processed_recent_msgs = []

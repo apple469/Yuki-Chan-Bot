@@ -5,7 +5,7 @@ from datetime import datetime
 import asyncio
 import re
 import aiohttp
-from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+from config import cfg
 from network.api_request import ApiCall
 from utils.logger import get_logger
 
@@ -13,7 +13,7 @@ logger = get_logger("maid")
 
 # 初始化全局稳健客户端
 # 它内部已经处理了主线与备线的切换逻辑
-api_client = ApiCall(LLM_API_KEY, LLM_BASE_URL)
+api_client = ApiCall(cfg.LLM_API_KEY, cfg.LLM_BASE_URL)
 
 
 def clean_json_output(text):
@@ -38,7 +38,7 @@ async def call_cloud_maid_robust(messages):
     # 直接调用你 api_request.py 里的核心函数
     result = await api_client.robust_api_call(
         messages=messages,
-        model=LLM_MODEL,
+        model=cfg.LLM_MODEL,
         **payload_kwargs
     )
 

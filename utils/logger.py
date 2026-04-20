@@ -6,7 +6,7 @@ import sys
 import time
 import datetime
 
-from config import BASE_DIR, DEBUG
+from utils import BASE_DIR
 
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -149,7 +149,7 @@ def _try_enable_windows_ansi():
         pass
 
 
-def setup_logging(level: int = None):
+def setup_logging(level: int = None, debug: bool = False):
     """
     配置全局日志：
     - 启动时自动归档旧日志
@@ -157,7 +157,7 @@ def setup_logging(level: int = None):
     - 文件持久化（追加写入当前 yuki.log）
     """
     if level is None:
-        level = logging.DEBUG if DEBUG else logging.INFO
+        level = logging.DEBUG if debug else logging.INFO
 
     # 先归档上一次的日志
     _archive_existing_log(keep=30)

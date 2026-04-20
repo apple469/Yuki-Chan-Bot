@@ -6,8 +6,7 @@ import aiohttp
 import cv2
 import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
-from config import MAX_CONCURRENT_MEME, LLM_API_KEY, IMAGE_PROCESS_API_URL, REQUEST_TIMEOUT, VISION_MODEL, \
-    IMAGE_PROCESS_API_KEY
+from config import cfg
 from core.prompts import VISION_PROMPT
 from modules.vision.utils import log
 from modules.vision.cache import MemeCache
@@ -18,7 +17,7 @@ logger = get_logger("vision_processor")
 class MemeProcessor:
     def __init__(self):
         self.cache = MemeCache()
-        self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_MEME)
+        self.semaphore = asyncio.Semaphore(cfg.MAX_CONCURRENT_MEME)
 
     @staticmethod
     def get_image_hash(image_data):
@@ -63,14 +62,14 @@ class MemeProcessor:
         reraise=True
     )
     async def call_api(self, b64_data):
-        logger.debug(f"token:{IMAGE_PROCESS_API_KEY}, url:{IMAGE_PROCESS_API_URL}")
+        logger.debug(f"token:{cfg.IMAGE_PROCESS_API_KEY}, url:{cfg.IMAGE_PROCESS_API_URL}")
         headers = {
-            "Authorization": f"Bearer {IMAGE_PROCESS_API_KEY}",
+            "Authorization": f"Bearer {cfg.IMAGE_PROCESS_API_KEY}",
             "Content-Type": "application/json"
         }
         #Qwen/Qwen3-VL-8B-Instruct
         payload = {
-            "model": VISION_MODEL,
+            "model": cfg.VISION_MODEL,
             "messages": [
                 {
                     "role": "user",
@@ -84,8 +83,8 @@ class MemeProcessor:
             "max_tokens": 50,
             "temperature": 0.75
         }
-        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
-            async with session.post(IMAGE_PROCESS_API_URL, json=payload, headers=headers) as resp:
+        async with aiohttp.ClientSession(timeout=cfg.REQUEST_TIMEOUT) as session:
+            async with session.post(cfg.IMAGE_PROCESS_API_URL, json=payload, headers=headers) as resp:
                 logger.debug(f"[DEBUG] 响应状态码: {resp.status}")
                 if resp.status == 200:
                     result = await resp.json()
@@ -103,7 +102,7 @@ class MemeProcessor:
 
     async def understand_from_url(self, img_url, llm):
 
-        if not VISION_MODEL:
+        if not cfg.VISION_MODEL:
             logger.info("未设置视觉模型，跳过图像识别")
             # 如果没有配置视觉模型，直接返回占位符，不进行下载和API调用
             return "[未知动画表情]"

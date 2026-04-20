@@ -13,7 +13,7 @@ with warnings.catch_warnings():
     import jieba.analyse
 from sentence_transformers import SentenceTransformer
 
-from config import EMBED_MODEL, VECTOR_DB_PATH, ROBOT_NAME
+from config import cfg
 from modules.vision.processor import MemeProcessor
 from network.api_request import ApiCall
 from utils.logger import get_logger
@@ -48,9 +48,9 @@ class StickerManager:
     def __init__(self, llm: ApiCall):
         self.llm = llm
         self.vl_processor = MemeProcessor()                    # 已支持本地文件
-        self.model = SentenceTransformer(EMBED_MODEL)
+        self.model = SentenceTransformer(cfg.EMBED_MODEL)
 
-        self.client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
+        self.client = chromadb.PersistentClient(path=cfg.VECTOR_DB_PATH)
         self.collection = self.client.get_or_create_collection(
             name="stickers",
             metadata={"hnsw:space": "cosine"}

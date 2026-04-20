@@ -7,7 +7,7 @@ import shutil
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from modules.memory.rag import MemoryRAG
-from config import VECTOR_DB_PATH
+from config import cfg
 
 
 def migrate_database():
@@ -19,10 +19,10 @@ def migrate_database():
         return
 
     # --- 核心修复步骤：强制清理旧维度限制 ---
-    if os.path.exists(VECTOR_DB_PATH):
-        print(f"[Action] 正在物理删除旧数据库目录: {VECTOR_DB_PATH}")
+    if os.path.exists(cfg.VECTOR_DB_PATH):
+        print(f"[Action] 正在物理删除旧数据库目录: {cfg.VECTOR_DB_PATH}")
         # 必须删除整个文件夹，Chroma 才会重新创建 768 维的索引
-        shutil.rmtree(VECTOR_DB_PATH)
+        shutil.rmtree(cfg.VECTOR_DB_PATH)
 
     print("[RAG] 初始化全新 768 维记忆库...")
     rag = MemoryRAG()

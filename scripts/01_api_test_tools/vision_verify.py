@@ -2,12 +2,15 @@ import asyncio
 import aiohttp
 import time
 import os
-import os
-from dotenv import load_dotenv
+import sys
+from pathlib import Path
 
-load_dotenv()
+# 将项目根目录加入路径以导入 config
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from config import cfg
+
 # --- 配置区 ---
-API_KEY = os.getenv("LLM_API_KEY", "").strip()
+API_KEY = cfg.LLM_API_KEY
 BASE_URL = "https://api.ytea.top/v1/chat/completions"  # 根据实际地址调整
 # 待验证的模型列表
 MODELS_TO_CHECK = [
