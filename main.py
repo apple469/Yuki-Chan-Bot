@@ -101,7 +101,8 @@ async def main_process(chat_id, mode, debounce_flag=True, force_reply=None):
     logger.info("[System] Yuki 正在回忆...")
 
     # 检索相关记忆总用法（包含关键词提取和语义向量匹配）
-    relevant_diaries = memory_rag.search_diaries(combined_text, chat_id=chat_id)
+    dynamic_top_k = 10 if len(combined_text) > 100 else 8
+    relevant_diaries = memory_rag.search_diaries(combined_text, chat_id=chat_id, top_k=dynamic_top_k)
     logger.info(f"[System] 检索到 {len(relevant_diaries)} 条相关日记:")
 
     logger.info(f"检索完成，用时 {(time.time()-first_time):.2f}")
@@ -212,13 +213,13 @@ async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''
 
     if chat_id not in yuki.message_buffer:
         yuki.message_buffer[chat_id] = []
-
-    yuki.message_buffer[chat_id].append({
-        "name": sender_name,
-        "content": content,  # 这是带 【“姓名”】说: 的完整格式
-        "raw_text": raw_message,  # 这是原始纯文本
-        "is_bot": is_bot
-    })
+    if sender_name!="BOT 奈奈川（lito）":
+        yuki.message_buffer[chat_id].append({
+            "name": sender_name,
+            "content": content,  # 这是带 【“姓名”】说: 的完整格式
+            "raw_text": raw_message,  # 这是原始纯文本
+            "is_bot": is_bot
+        })
 
     if cfg.ROBOT_NAME.lower() in raw_message.lower():  # 使用原始文本判断，更准确
         real_time_debounce_time = 5

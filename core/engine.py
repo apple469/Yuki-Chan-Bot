@@ -270,7 +270,7 @@ class YukiEngine:
         now_hour = datetime.datetime.now().hour
         query = f"{context_text}"
 
-        dynamic_top_k = 8 if len(query) > 50 else 5
+        dynamic_top_k = 15 if len(query) > 50 else 10
 
         # 3. RAG 检索
         relevant_diaries = self.rag.search_diaries(query, chat_id=chat_id, top_k=dynamic_top_k)

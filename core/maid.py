@@ -97,6 +97,29 @@ MAID_SYSTEM_PROMPT = f"""
 }}
 """
 
+def clean_json_output(text):
+    """提取第一个 { 到最后一个 } 之间的内容，防止模型输出废话"""
+    if not text: return ""
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    return match.group(0) if match else text.strip()
+
+
+async def call_cloud_maid_robust(messages):
+    # 强制要求 JSON 格式输出
+    payload_kwargs = {
+        "response_format": {"type": "json_object"},
+        "temperature": 0.3
+    }
+
+    # 直接调用你 api_request.py 里的核心函数
+    result = await api_client.robust_api_call(
+        messages=messages,
+        model=LLM_MODEL,
+        **payload_kwargs
+    )
+
+    # 清洗可能存在的 Markdown 标签
+    return clean_json_output(result)
 
 # --- 代码清洗函数 ---
 def clean_code_block(raw_code):

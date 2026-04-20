@@ -130,7 +130,7 @@ class MemoryRAG:
             return filtered
         return []
 
-    def search_diaries(self, query_text, chat_id=None, n_results=12, top_k = 5):
+    def search_diaries(self, query_text, chat_id=None, n_results=12, top_k=8):
         """
         并行双池检索：语义池与关键词池并行提取，算法全透明调试版
         """
@@ -144,6 +144,8 @@ class MemoryRAG:
         # 1. 准备：类型转换与关键词提取
         cid_str = str(chat_id) if chat_id else None
         filter_cond = {"chat_id": {"$in": [cid_str, "manual_record"]}} if cid_str else None
+
+
 
         raw_keywords = jieba.analyse.extract_tags(query_text, topK=top_k, withWeight=True)
 
@@ -163,14 +165,9 @@ class MemoryRAG:
             where=filter_cond
         )
 
-        # 3. 【并行池 B】关键词扫描池 (覆盖更广)
-        # 取较大范围以确保那些向量距离远但含关键词的日记能被“打捞”
-        logger.debug(f"[RAG-Debug] 🎣 正在提取关键词扫描池...")
-        all_local_docs = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(100, total_count),
-            where=filter_cond
-        )
+        # 3. 【并行池 B】全量关键词扫描池 (关键改动：使用 get 代替 query)
+        logger.debug(f"[RAG-Debug] 🎣 正在执行全量关键词扫描...")
+        all_relevant_docs = self.collection.get(where=filter_cond)
 
         # 4. 合并与重置逻辑
         combined_map = {} # {doc_id: item_data}
@@ -191,27 +188,27 @@ class MemoryRAG:
                 }
 
         # 处理关键词池 (保底分策略)
-        initial_kw_score = max_v_score * 0.75
+        initial_kw_score = max_v_score * 0.85
         kw_found_count = 0
-        if all_local_docs['documents'] and all_local_docs['documents'][0]:
-            for i in range(len(all_local_docs['documents'][0])):
-                doc_id = all_local_docs['ids'][0][i]
-                content = all_local_docs['documents'][0][i]
+        if all_relevant_docs['documents']:
+            for i in range(len(all_relevant_docs['documents'])):
+                doc_id = all_relevant_docs['ids'][i]
+                content = all_relevant_docs['documents'][i]
 
                 # 检查是否包含关键词
                 matched_in_doc = [kw for kw, _ in keywords_with_weight if kw in content]
-                if matched_in_doc:
-                    if doc_id not in combined_map:
-                        combined_map[doc_id] = {
-                            "doc": content,
-                            "meta": all_local_docs['metadatas'][0][i],
-                            "base_score": initial_kw_score,
-                            "source": f"关键词池(保底:{initial_kw_score:.2f})"
-                        }
-                        kw_found_count += 1
-        logger.debug(f"[RAG-Debug] ⚖️ 池合并完成: 语义池注入 {len(combined_map)-kw_found_count} 条，关键词池打捞 {kw_found_count} 条")
+                if matched_in_doc and doc_id not in combined_map:
+                    combined_map[doc_id] = {
+                        "doc": content,
+                        "meta": all_relevant_docs['metadatas'][i],
+                        "base_score": initial_kw_score,
+                        "source": f"关键词打捞(保底:{initial_kw_score:.2f})"
+                    }
+                    kw_found_count += 1
 
-        # 5. 二次加权计算
+        logger.debug(
+            f"[RAG-Debug] ⚖️ 池合并完成: 语义池注入 {len(combined_map) - kw_found_count} 条，关键词池打捞 {kw_found_count} 条")
+
         final_results = []
         for item in combined_map.values():
             # 这里的 _calculate_final_item 需要接收 base_score
@@ -228,7 +225,7 @@ class MemoryRAG:
 
         logger.debug(f"[RAG-Debug] 📊 排序结果 (Top 3):")
         for i, res in enumerate(final_results[:3]):
-            logger.debug(f"   #{i+1} 分数:{res['score']:.4f} | {res['debug']}")
+            logger.debug(f"   #{i + 1} 分数:{res['score']:.4f} | {res['debug']}")
 
         return final_results[:12]
 
@@ -240,7 +237,7 @@ class MemoryRAG:
         for kw, weight in keywords_with_weight:
             if kw in doc:
                 # 权重补偿
-                keyword_boost += weight * 0.15
+                keyword_boost += weight * 0.5
                 matched_words.append(kw)
 
         final_score = base_score + keyword_boost
