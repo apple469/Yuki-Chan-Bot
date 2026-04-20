@@ -1,10 +1,10 @@
 import re
-from config import MAX_MESSAGE_LENGTH
+from config import cfg
 from utils.logger import get_logger
 
 logger = get_logger("cq_protocol")
 
-def smart_truncate(content, max_len = MAX_MESSAGE_LENGTH, suffix="..."):
+def smart_truncate(content, max_len = cfg.MAX_MESSAGE_LENGTH, suffix="..."):
     """
     保留原有调试好的逻辑：智能截断超长消息并保留CQ码完整性
     """

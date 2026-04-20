@@ -12,5 +12,8 @@ skills/
 core/skills
 logs/
 core/tasks
-configs/config.yaml
+# configs 目录：只保留 README.md，其他全部忽略
+configs/*
+!configs/README.md
+
 .venv/

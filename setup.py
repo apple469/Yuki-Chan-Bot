@@ -12,6 +12,19 @@ if shutil.which("uv") and sys.prefix == sys.base_prefix:
         print(f"   uv run python setup.py")
         print("   或先激活虚拟环境后再运行。\n")
 
+def hide_file(path):
+    """将指定文件设为隐藏（跨平台）"""
+    if not os.path.exists(path):
+        return
+    try:
+        if os.name == "nt":
+            import ctypes
+            ctypes.windll.kernel32.SetFileAttributesW(os.path.abspath(path), 0x02)
+        elif sys.platform == "darwin":
+            subprocess.run(["chflags", "hidden", path], check=False)
+    except Exception:
+        pass
+
 def ensure_dirs():
     """确保必要的文件夹存在"""
     dirs = ["./models", "./data", "./yuki_memory", "./logs"]
@@ -54,109 +67,55 @@ configs/config.yaml
     else:
         with open(".gitignore", "r", encoding="utf-8") as f:
             existing = f.read()
-        if "configs/config.yaml" not in existing:
+        if "configs/*" not in existing:
             with open(".gitignore", "a", encoding="utf-8") as f:
-                f.write("\nconfigs/config.yaml\n")
-            print("🛡️ 已追加 configs/config.yaml 到 .gitignore")
+                f.write("\nconfigs/*\n")
+            print("🛡️ 已追加 configs/* 到 .gitignore")
         else:
             print("已存在 .gitignore，跳过")
 
-    # 3. 自动生成初始 configs/config.yaml
+    # 3. 自动生成/升级 configs/config.yaml
     os.makedirs("configs", exist_ok=True)
-    if not os.path.exists("configs/config.yaml"):
-        default_config = '''# Yuki-Chan Bot 配置文件
-# 所有配置均在此文件管理，请勿提交到 Git
-# 本文件已在 .gitignore 中
-
-# ================= 机器人身份 =================
-robot_name: "yuki"
-master_name: "主人"
-
-# ================= 安全配置 =================
-max_message_length: 150                # 单条消息最大长度，防止 token 炸弹
-
-# ================= API 配置 =================
-api:
-  llm_base_url: "https://api.deepseek.com/v1"
-  deepseek_base_url: "https://api.deepseek.com/v1"
-  image_process_url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-  llm_api_key: ""                      # 首选 LLM API Key
-  backup_api_key: ""                   # 备选 API Key（留空则使用 llm_api_key）
-  image_process_api_key: ""            # 图像处理 API Key
-
-# ================= 模型配置 =================
-model:
-  llm: "deepseek-chat"                 # 主对话模型
-  backup: "deepseek-chat"              # 备用对话模型
-  vision: "qwen3-vl-flash"             # 视觉/多模态模型；如不需要可留空 ""
-
-# ================= 连接配置 =================
-connection:
-  napcat_ws_url: "ws://127.0.0.1:3001"
-  max_retries: 3
-
-# ================= 目标配置 =================
-target:
-  qq: 0                                # 私聊目标 QQ 号
-  groups: []                           # 目标群聊 QQ 号列表，如 [123456, 789012]
-
-# ================= 日记触发配置 =================
-diary:
-  idle_seconds: 120                    # 空闲多久后触发日记（秒）
-  min_turns: 15                        # 最小对话轮数阈值
-  max_length: 50                       # 历史记录超过此条数强制写日记
-
-# ================= RAG 记忆配置 =================
-rag:
-  retrieval_top_k: 20                  # 检索返回的最大日记条数
-  keep_last_dialogue: 10               # 保留的近期对话条数（短期记忆）
-
-# ================= 本地文件路径配置 =================
-# 均为相对项目根目录的路径
-paths:
-  vector_db: "./yuki_memory"
-  embed_model: "./models/text2vec-base-chinese"
-  history_file: "./data/chat_history.json"
-  log_file: "./data/yuki_log.txt"
-  cache_dir: "./data"
-  cache_file: "./data/meme_cache.json"
-
-# ================= 时间/超时配置 =================
-timing:
-  debounce_time: 32                    # 防抖时间（秒）
-  request_timeout:
-    total: 60
-    connect: 10
-    sock_read: 30
-
-# ================= 精力值系统配置 =================
-energy:
-  initial: 100
-  max: 100.0
-  recovery_per_min: 0.8
-  cost_per_reply: 6
-  min_active: 25                       # 低于此值进入低活跃状态
-
-# ================= 注意力/响应配置 =================
-attention:
-  sensitivity: 0.12
-  decay_level: 0.65
-  sigmoid_centre: 50.0
-  sigmoid_alpha: 0.08
-  # 以下关键词会在运行时被追加 ROBOT_NAME，无需手动修改
-  keywords:
-    - "主人"
-    - "哥哥"
-
-# ================= 并发与调试配置 =================
-max_concurrent_meme: 3
-debug: true
-'''
-        with open("configs/config.yaml", "w", encoding="utf-8") as f:
+    config_path = "configs/config.yaml"
+    if not os.path.exists(config_path):
+        from config import generate_default_config
+        default_config = generate_default_config()
+        with open(config_path, "w", encoding="utf-8") as f:
             f.write(default_config)
-        print("📄 已生成初始 configs/config.yaml")
+        print("[Config] 已生成初始 configs/config.yaml")
     else:
-        print("📄 已存在 configs/config.yaml，跳过")
+        with open(config_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        if "# Yuki-Chan Bot" not in content:
+            # 旧文件无注释，升级：保留现有值，重新生成带注释版本
+            import yaml
+            import re
+            old_cfg = yaml.safe_load(content) or {}
+            from config import generate_default_config
+            new_content = generate_default_config()
+
+            def _inject(data, prefix=""):
+                nonlocal new_content
+                for k, v in data.items():
+                    if isinstance(v, dict):
+                        _inject(v, f"{prefix}.{k}" if prefix else k)
+                    else:
+                        val_yaml = yaml.dump({k: v}, default_flow_style=False, sort_keys=False).strip()
+                        _, val_part = val_yaml.split(":", 1)
+                        val_part = val_part.strip()
+                        pattern = rf"^(\s*{re.escape(k)}:\s*)([^\n#]*?)(\s*(?:#.*)?)$"
+                        replacement = rf"\g<1>{val_part}\g<3>"
+                        new_content = re.sub(pattern, replacement, new_content, flags=re.MULTILINE, count=1)
+
+            _inject(old_cfg)
+            # 备份旧文件
+            with open(config_path + ".old", "w", encoding="utf-8") as f:
+                f.write(content)
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+            print("[Config] 已升级 configs/config.yaml，添加注释并保留原有配置（旧文件已备份为 .old）")
+        else:
+            print("[Config] 已存在 configs/config.yaml，跳过")
 
 def install_requirements():
     """自动安装依赖（优先使用 uv，回退到 pip）"""
@@ -272,10 +231,54 @@ def _load_yaml():
     return {}
 
 def _save_yaml(data):
+    """保存 yaml，尽可能保留现有注释（只替换变更的值）"""
     import yaml
+    import re
     path = "configs/config.yaml"
+
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        return
+
+    with open(path, "r", encoding="utf-8") as f:
+        original = f.read()
+
+    def _replace_values(d, indent=0):
+        nonlocal original
+        spaces = "  " * indent
+        for k, v in d.items():
+            if isinstance(v, dict):
+                _replace_values(v, indent + 1)
+            else:
+                # 生成 yaml 格式的值字符串
+                if isinstance(v, list):
+                    # 列表直接用流式风格 [a, b]
+                    val_part = yaml.dump(v, allow_unicode=True, default_flow_style=True).strip()
+                else:
+                    val_yaml = yaml.dump({k: v}, allow_unicode=True, default_flow_style=False, sort_keys=False).strip()
+                    _, val_part = val_yaml.split(":", 1)
+                    val_part = val_part.strip()
+
+                # 匹配并替换（保留行尾注释）
+                pattern = rf"^({spaces}{re.escape(k)}:\s*)([^\n#]*?)(\s*(?:#.*)?)$"
+                new_original = re.sub(
+                    pattern,
+                    lambda m: f"{m.group(1)}{val_part}{m.group(3)}",
+                    original,
+                    flags=re.MULTILINE,
+                    count=1
+                )
+                if new_original != original:
+                    original = new_original
+                else:
+                    # 键不存在，追加到文件末尾（兜底）
+                    original += f"\n{spaces}{k}: {val_part}"
+
+    _replace_values(data)
+
     with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        f.write(original)
 
 def config_yaml(mode):
     """交互式配置 configs/config.yaml"""

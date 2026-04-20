@@ -9,7 +9,7 @@ with warnings.catch_warnings():
     import jieba.analyse
 from sentence_transformers import SentenceTransformer
 
-from config import EMBED_MODEL, VECTOR_DB_PATH, RETRIEVAL_TOP_K, ROBOT_NAME
+from config import cfg
 from utils.logger import get_logger
 
 logger = get_logger("rag")
@@ -26,8 +26,8 @@ class MemoryRAG:
 
     def _initialize(self):
         logger.info("[RAG] 初始化记忆库...")
-        self.model = SentenceTransformer(EMBED_MODEL)
-        self.client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
+        self.model = SentenceTransformer(cfg.EMBED_MODEL)
+        self.client = chromadb.PersistentClient(path=cfg.VECTOR_DB_PATH)
         self.collection = self.client.get_or_create_collection(
             name="diaries",
             metadata={"hnsw:space": "cosine"} # 使用余弦相似度进行向量匹配
@@ -42,7 +42,7 @@ class MemoryRAG:
         """从文件加载屏蔽词，支持自动去重和过滤空行"""
         if not os.path.exists(self.blacklist_path):
             # 如果文件不存在，创建一个默认的
-            default_list = [ROBOT_NAME, '主人', '哥哥', '池宇健', '人家']
+            default_list = [cfg.ROBOT_NAME, '主人', '哥哥', '池宇健', '人家']
             with open(self.blacklist_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(default_list))
             return default_list
@@ -99,7 +99,7 @@ class MemoryRAG:
         )
         logger.info(f"[RAG] 日记已存入 (chat_id={chat_id}): {content[:50]}...")
 
-    def search_memory(self, query, chat_id=None, top_k=RETRIEVAL_TOP_K, threshold=1.0):
+    def search_memory(self, query, chat_id=None, top_k=cfg.RETRIEVAL_TOP_K, threshold=1.0):
         """混合检索：支持当前群聊 + 手动录入的记忆"""
         if not query.strip():
             return []

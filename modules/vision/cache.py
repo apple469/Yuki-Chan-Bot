@@ -1,7 +1,7 @@
 import json
 import os
 
-from config import CACHE_DIR, CACHE_FILE
+from config import cfg
 from utils.logger import get_logger
 
 logger = get_logger("vision_cache")
@@ -11,16 +11,16 @@ class MemeCache:
     def __init__(self):
         self.cache = {}
         self.stats = {}  # 新增：统计每个key的使用次数
-        if not os.path.exists(CACHE_DIR):
-            os.makedirs(CACHE_DIR)
+        if not os.path.exists(cfg.CACHE_DIR):
+            os.makedirs(cfg.CACHE_DIR)
         self._load_cache()
         self._load_stats()  # 新增：加载统计信息
 
     def _load_cache(self):
         """从文件加载缓存到内存"""
-        if os.path.exists(CACHE_FILE):
+        if os.path.exists(cfg.CACHE_FILE):
             try:
-                with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                with open(cfg.CACHE_FILE, "r", encoding="utf-8") as f:
                     self.cache = json.load(f)
             except Exception as e:
                 logger.warning(f"[MemeCache] 加载缓存失败: {e}")
@@ -31,7 +31,7 @@ class MemeCache:
 
     def _load_stats(self):
         """加载统计信息"""
-        stats_file = CACHE_FILE.replace('.json', '_stats.json')
+        stats_file = cfg.CACHE_FILE.replace('.json', '_stats.json')
         if os.path.exists(stats_file):
             try:
                 with open(stats_file, "r", encoding="utf-8") as f:
@@ -46,7 +46,7 @@ class MemeCache:
 
     def save_stats(self):
         """保存统计信息"""
-        stats_file = CACHE_FILE.replace('.json', '_stats.json')
+        stats_file = cfg.CACHE_FILE.replace('.json', '_stats.json')
         try:
             with open(stats_file, "w", encoding="utf-8") as f:
                 json.dump(self.stats, f, ensure_ascii=False, indent=2)
@@ -56,9 +56,9 @@ class MemeCache:
 
     def save(self):
         try:
-            with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            with open(cfg.CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
-            logger.info(f"[MemeCache] 缓存已保存到 {CACHE_FILE}")
+            logger.info(f"[MemeCache] 缓存已保存到 {cfg.CACHE_FILE}")
             self.save_stats()  # 同时保存统计信息
         except Exception as e:
             logger.error(f"[MemeCache] 保存缓存失败: {e}")

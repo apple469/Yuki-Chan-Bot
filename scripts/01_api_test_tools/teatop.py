@@ -7,9 +7,9 @@ from pathlib import Path
 
 # 将项目根目录加入路径以导入 config
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from config import LLM_API_KEY
+from config import cfg
 
-TEATOP_API_KEY = LLM_API_KEY
+TEATOP_API_KEY = cfg.LLM_API_KEY
 BASE_URL = "https://api.ytea.top/v1/chat/completions"
 
 # 专注测试刚才表现优异和有潜力的选手

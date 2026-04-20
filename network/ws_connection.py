@@ -3,14 +3,14 @@ import json
 import asyncio
 import websockets
 from typing import Optional, Dict
-from config import NAPCAT_WS_URL
+from config import cfg
 from asyncio import Future
 from utils.logger import get_logger
 
 logger = get_logger("ws_connection")
 
 class BotConnector:
-    def __init__(self, ws_url: str = NAPCAT_WS_URL):
+    def __init__(self, ws_url: str = cfg.NAPCAT_WS_URL):
         self.ws_url = ws_url
         self.websocket = None
         self._lock = asyncio.Lock()

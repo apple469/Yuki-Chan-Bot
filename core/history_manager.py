@@ -2,14 +2,14 @@ import datetime
 import json
 import os
 import threading
-from config import HISTORY_FILE, LOG_FILE
+from config import cfg
 from utils.logger import get_logger
 
 logger = get_logger("history")
 
 
 class HistoryManager:
-    def __init__(self, history_file=HISTORY_FILE, log_file=LOG_FILE):
+    def __init__(self, history_file=cfg.HISTORY_FILE, log_file=cfg.LOG_FILE):
         self.history_file = history_file
         self.log_file = log_file
         self._cache = None

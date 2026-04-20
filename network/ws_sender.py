@@ -1,7 +1,7 @@
 import json
 import os
 import asyncio
-from config import MAX_RETRIES
+from config import cfg
 from network.ws_connection import BotConnector
 from utils.logger import get_logger
 
@@ -13,7 +13,7 @@ class MessageSender:
 
     async def send(self, chat_id, message, mode="private"):
         """闭环发送：失败自动触发重连"""
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(cfg.MAX_RETRIES):
             try:
                 ws = await self.connector.ensure_connection()
                 action = "send_private_msg" if mode == "private" else "send_group_msg"
@@ -26,7 +26,7 @@ class MessageSender:
             except Exception as e:
                 logger.error(f"[Sender] 发送失败 (尝试 {attempt+1}): {e}")
                 self.connector.websocket = None # 标记连接失效
-                if attempt == MAX_RETRIES - 1: raise e # 如果第二次还失败，抛出错误
+                if attempt == cfg.MAX_RETRIES - 1: raise e # 如果第二次还失败，抛出错误
                 await asyncio.sleep(1)
 
     async def send_local_image(self, chat_id, local_path, mode="private"):

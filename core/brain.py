@@ -5,7 +5,7 @@ from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 
 from core.prompts import YUKI_SETTING_PRIVATE, YUKI_SETTING_GROUP
-from config import *
+from config import cfg
 import asyncio
 from utils.logger import get_logger
 
@@ -34,7 +34,7 @@ class YukiState:
         # # 记录每个群上一次“升温”的时间，用于计算自然冷却
         # self.last_activity_update = {}
 
-    async def boost_activity(self, chat_id, sensitivity = SENSITIVITY) -> None:
+    async def boost_activity(self, chat_id, sensitivity = cfg.SENSITIVITY) -> None:
         """
         非线性提升活跃度：
         距离上限越近，单条消息提供的增量越小。
@@ -51,7 +51,7 @@ class YukiState:
             logger.info(f"[Activity] {cid} 活跃度波动: {current:.2f} -> {self.group_activity[cid]:.2f}")
         return
 
-    async def decay_heartbeat(self, decay_level = DECAY_LEVEL) -> None:
+    async def decay_heartbeat(self, decay_level = cfg.DECAY_LEVEL) -> None:
         """核心：每5分钟执行一次的恒定半衰降温"""
         while True:
             await asyncio.sleep(600)  # 恒定 5 分钟 (300秒)
@@ -80,11 +80,11 @@ class YukiState:
         now = datetime.datetime.now()
         # 初始化该群精力
         if chat_id not in self.energy:
-            self.energy[chat_id] = INITIAL_ENERGY
+            self.energy[chat_id] = cfg.INITIAL_ENERGY
             self.last_update[chat_id] = now
             return self.energy[chat_id]
         duration_mins = (now - self.last_update[chat_id]).total_seconds() / 60
-        self.energy[chat_id] = min(MAX_ENERGY, self.energy[chat_id] + (duration_mins * RECOVERY_PER_MIN))
+        self.energy[chat_id] = min(cfg.MAX_ENERGY, self.energy[chat_id] + (duration_mins * cfg.RECOVERY_PER_MIN))
         self.last_update[chat_id] = now
         return self.energy[chat_id]
 
@@ -92,7 +92,7 @@ class YukiState:
         """消耗精力值"""
 
         if chat_id in self.energy:
-            self.energy[chat_id] = max(0.0, self.energy[chat_id] - COST_PER_REPLY)
+            self.energy[chat_id] = max(0.0, self.energy[chat_id] - cfg.COST_PER_REPLY)
 
     def update_desire_to_reply(self, chat_id):
         """
@@ -116,7 +116,7 @@ class YukiState:
         total_desire = max(follow_desire, ice_break_desire) * self.get_smooth_time_weight()
 
         # 3. Sigmoid 非线性归一化
-        normalized = 100 / (1 + math.exp(-SIGMOID_ALPHA * (total_desire - SIGMOID_CENTRE)))
+        normalized = 100 / (1 + math.exp(-cfg.SIGMOID_ALPHA * (total_desire - cfg.SIGMOID_CENTRE)))
 
         # 4. 隔离存储：只更新当前 chat_id 的欲望值
         self.desire_to_start_topic[cid] = round(normalized, 2)

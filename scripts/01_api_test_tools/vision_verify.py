@@ -7,10 +7,10 @@ from pathlib import Path
 
 # 将项目根目录加入路径以导入 config
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from config import LLM_API_KEY
+from config import cfg
 
 # --- 配置区 ---
-API_KEY = LLM_API_KEY
+API_KEY = cfg.LLM_API_KEY
 BASE_URL = "https://api.ytea.top/v1/chat/completions"  # 根据实际地址调整
 # 待验证的模型列表
 MODELS_TO_CHECK = [
