@@ -130,6 +130,7 @@ def migrate_from_env():
     mapping = {
         "LLM_API_KEY": ("api", "llm_api_key"),
         "IMAGE_PROCESS_API_KEY": ("api", "image_process_api_key"),
+        "NAPCAT_WS_TOKEN": ("connection", "napcat_ws_token"),
         "TARGET_QQ": ("target", "qq"),
         "TARGET_GROUPS": ("target", "groups"),
     }
@@ -232,6 +233,13 @@ def config_yaml(mode):
             set_nested(cfg, path, val)
             changed = True
             print(f"  ✓ {'.'.join(path)} 已设置")
+
+    print("\n--- 配置 NapCat 连接 ---")
+    ws_token_val = input("请输入 NapCat WebSocket Token（留空则不认证）: ").strip()
+    if ws_token_val:
+        set_nested(cfg, ("connection", "napcat_ws_token"), ws_token_val)
+        changed = True
+        print("  ✓ connection.napcat_ws_token 已设置")
 
     print("\n--- 配置目标 QQ ---")
     # QQ 号配置逻辑

@@ -40,8 +40,9 @@ _ATTR_MAP = {
     "VISION_MODEL": (("model", "vision"), "qwen3-vl-flash", "视觉/多模态模型；如不需要可留空"),
 
     # 连接
-    "NAPCAT_WS_URL": (("connection", "napcat_ws_url"), "ws://127.0.0.1:3001", "NapCat WebSocket 地址"),
-    "MAX_RETRIES":   (("connection", "max_retries"), 3, "最大重试次数"),
+    "NAPCAT_WS_URL":  (("connection", "napcat_ws_url"), "ws://localhost:3001", "NapCat WebSocket 地址"),
+    "NAPCAT_WS_TOKEN": (("connection", "napcat_ws_token"), "", "NapCat WebSocket 认证 Token（留空则不认证）"),
+    "MAX_RETRIES":    (("connection", "max_retries"), 3, "最大重试次数"),
 
     # 目标
     "TARGET_QQ":     (("target", "qq"), 0, "私聊目标 QQ 号"),
