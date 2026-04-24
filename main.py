@@ -5,6 +5,8 @@ import time
 import datetime
 import sys
 
+from sympy import true
+
 from core.brain import YukiState
 from core.engine import YukiEngine
 from core.history_manager import HistoryManager
@@ -15,6 +17,7 @@ from network.ws_connection import BotConnector
 from network.ws_sender import MessageSender
 from network.api_request import ApiCall
 from config import cfg
+from webui import build_ui
 import os
 from utils.logger import setup_logging, get_logger
 
@@ -100,10 +103,10 @@ async def main_process(chat_id, mode, debounce_flag=True, force_reply=None):
     if (mode == "group") and (not await engine.decide_to_reply(history_dict[chat_id], message_objs, chat_id,force_reply = force_reply)):
         # 保存获取的上下文信息
         history_manager.save(history_dict)
-        logger.info("[System] Yuki 决定继续潜水...")
+        logger.info(f"[System] {cfg.ROBOT_NAME.title()} 决定继续潜水...")
         return
 
-    logger.info("[System] Yuki 正在回忆...")
+    logger.info(f"[System] {cfg.ROBOT_NAME.title()} 正在回忆...")
 
     # 检索相关记忆总用法（包含关键词提取和语义向量匹配）
     dynamic_top_k = 10 if len(combined_text) > 100 else 8
@@ -114,15 +117,15 @@ async def main_process(chat_id, mode, debounce_flag=True, force_reply=None):
 
     Yuki_Answer = await engine.api_reply(chat_id, combined_text, history_dict, mode, relevant_diaries)
 
-    logger.info("Yuki打字完成！")
+    logger.info(f"{cfg.ROBOT_NAME.title()}打字完成！")
     if mode == "group":
         yuki.consume_energy(chat_id)
-    logger.info(f"[System] Yuki 正在发送消息...(剩余精力: {yuki.energy[chat_id]:.1f})")
+    logger.info(f"[System] {cfg.ROBOT_NAME.title()} 正在发送消息...(剩余精力: {yuki.energy[chat_id]:.1f})")
     await sender.send(chat_id, Yuki_Answer, mode=mode)
     logger.info(f"[System] 发送完成！内容：{Yuki_Answer}")
-    logger.info("[System] Yuki正在保存上下文...")
+    logger.info(f"[System] {cfg.ROBOT_NAME.title()}正在保存上下文...")
     # 保存回复到上下文
-    history_manager.append_to_log(chat_id, "Yuki", Yuki_Answer)
+    history_manager.append_to_log(chat_id, cfg.ROBOT_NAME.title(), Yuki_Answer)
     history_dict[chat_id].append({
         "role": "assistant", 
         "content": Yuki_Answer,
@@ -234,8 +237,13 @@ async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''
 if __name__ == "__main__":
     try:
         logger.info("[System] 请确保已运行setup.py进行初始化配置！")
-        logger.info("[System] Yuki 正在初始化...")
+        logger.info(f"[System] {cfg.ROBOT_NAME.title()} 正在初始化...")
         start_time = time.time()
+        # check_config()
+        # ==========================================
+        # 2. 启动 WebUI (非阻塞模式)
+        # ==========================================
+
 
         # 加载与Napcat通信的Websocket服务
         connector = BotConnector(cfg.NAPCAT_WS_URL, cfg.NAPCAT_WS_TOKEN)
@@ -259,9 +267,21 @@ if __name__ == "__main__":
         engine = YukiEngine(llm, memory_rag, history_manager, yuki, sender)
         engine.process_callback = main_process
         # 在 engine = YukiEngine(...) 之后
-
+        success = False
+        try:
+            webui = build_ui()
+            webui.launch(
+                server_name="127.0.0.1",
+                server_port=1314,
+                prevent_thread_lock=True
+            )
+            success = True
+        except Exception as e:
+            success = False
+            logger.error(f"[WebUI] 启动失败: {e}")
         end_time = time.time()
         logger.info(f"[System] 初始化完成，耗时 {end_time - start_time:.1f} 秒")
+        if success: logger.info("[WebUI] 控制面板已在后台线程启动: http://127.0.0.1:1314")
         choice = input("[System] 选择模式：1. 私聊模式  2. 群聊模式（默认）\n请输入数字: ").strip()
         if choice != "2":
             # 初始化巡检名单，预载历史中的群聊ID和最后消息时间，确保后台检查能正常工作
