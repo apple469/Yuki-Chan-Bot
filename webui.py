@@ -51,6 +51,7 @@ input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:foc
     box-shadow: 0 0 0 3px var(--color-accent-subtle) !important; 
 }
 
+
 /* 主按钮动效 */
 /* 主按钮：果冻粉渐变与动效 */
 button.primary { 
@@ -96,8 +97,8 @@ def build_ui():
         # ================= 基础身份区 =================
         with gr.Accordion("Identity (基础身份)", open=True, elem_classes="accordion"):
             with gr.Row():
-                rn = gr.Textbox(label="Robot Name (机器人自称)", value=raw_config.get("robot_name", "Yuki"), scale=1)
-                mn = gr.Textbox(label="Master Name (主人称呼)", value=raw_config.get("master_name", "主人"), scale=1)
+                rn = gr.Textbox(label="Robot Name (机器人自称)", value=raw_config.get("robot_name", "Yuki"), max_lines=1, scale=1)
+                mn = gr.Textbox(label="Master Name (主人称呼)", value=raw_config.get("master_name", "主人"), max_lines=1, scale=1)
                 components_map["robot_name"], components_map["master_name"] = rn, mn
                 ordered_keys.extend(["robot_name", "master_name"])
 
@@ -125,7 +126,7 @@ def build_ui():
 
                                     # 根据键名渲染组件
                                     if "API_KEY" in name or "TOKEN" in name:
-                                        comp = gr.Textbox(label=label, value=val, type="password")
+                                        comp = gr.Textbox(label=label, value=val, type="password", max_lines=1)
                                     elif isinstance(default, bool):
                                         comp = gr.Checkbox(label=label, value=val)
                                     elif isinstance(default, int):
@@ -133,7 +134,7 @@ def build_ui():
                                     elif isinstance(default, float):
                                         comp = gr.Number(label=label, value=val)
                                     else:
-                                        comp = gr.Textbox(label=label, value=str(val) if val is not None else "")
+                                        comp = gr.Textbox(label=label, value=str(val) if val is not None else "", max_lines=1)
 
                                     components_map[name] = comp
                                     ordered_keys.append(name)
