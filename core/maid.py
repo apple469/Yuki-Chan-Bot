@@ -6,14 +6,10 @@ import asyncio
 import re
 import aiohttp
 from config import cfg
-from network.api_request import ApiCall
+from providers.registry import ProviderRegistry
 from utils.logger import get_logger
 
 logger = get_logger("maid")
-
-# 初始化全局稳健客户端
-# 它内部已经处理了主线与备线的切换逻辑
-api_client = ApiCall(cfg.LLM_API_KEY, cfg.LLM_BASE_URL)
 
 
 def clean_json_output(text):
@@ -24,19 +20,15 @@ def clean_json_output(text):
 
 
 async def call_cloud_maid_robust(messages):
-    """
-    使用 ApiCall 的稳健逻辑：
-    1. 尝试 TeaTop (低价)
-    2. 失败则熔断并尝试 DeepSeek 官方 (稳健)
-    """
-    # 强制要求 JSON 格式输出
+    """调用 Provider 完成小女仆任务。"""
+    provider = ProviderRegistry().get("default")
+
     payload_kwargs = {
         "response_format": {"type": "json_object"},
         "temperature": 0.3
     }
 
-    # 直接调用你 api_request.py 里的核心函数
-    result = await api_client.robust_api_call(
+    result = await provider.chat(
         messages=messages,
         model=cfg.LLM_MODEL,
         **payload_kwargs
@@ -96,30 +88,6 @@ MAID_SYSTEM_PROMPT = f"""
     "args": {{"reason": "当前系统时间：2026-04-15 22:23:31"}}
 }}
 """
-
-def clean_json_output(text):
-    """提取第一个 { 到最后一个 } 之间的内容，防止模型输出废话"""
-    if not text: return ""
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    return match.group(0) if match else text.strip()
-
-
-async def call_cloud_maid_robust(messages):
-    # 强制要求 JSON 格式输出
-    payload_kwargs = {
-        "response_format": {"type": "json_object"},
-        "temperature": 0.3
-    }
-
-    # 直接调用你 api_request.py 里的核心函数
-    result = await api_client.robust_api_call(
-        messages=messages,
-        model=LLM_MODEL,
-        **payload_kwargs
-    )
-
-    # 清洗可能存在的 Markdown 标签
-    return clean_json_output(result)
 
 # --- 代码清洗函数 ---
 def clean_code_block(raw_code):
@@ -311,22 +279,16 @@ async def maid_evolution_loop(user_goal: str, chat_id: str = None):
 
 
 if __name__ == "__main__":
-    # 1. 确保在程序结束时关闭 api_request 里的 Session
     async def main():
         try:
-            # 2. 使用 await 调用异步的进化循环
             target_task = "请写一个明显阻塞程序运行的代码并运行，比如打开任务管理器，我要测试agent的阻塞保护功能。"
             result = await maid_evolution_loop(target_task)
 
-            # 3. 此时 result 才是真正的字典结果
             if result:
                 logger.info(f"\n✅ 任务完成！结果: {result.get('result', '无返回信息')}")
         finally:
-            # 4. 无论成功失败，关闭连接池释放资源
-            await ApiCall.close()
+            await ProviderRegistry().close_all()
 
-
-    # 5. 启动 asyncio 事件循环
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

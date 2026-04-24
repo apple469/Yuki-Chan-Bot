@@ -15,7 +15,6 @@ from modules.message.CQParser import CQCodeParser
 from modules.vision.processor import MemeProcessor
 from network.ws_connection import BotConnector
 from network.ws_sender import MessageSender
-from network.api_request import ApiCall
 from config import cfg
 from webui import build_ui
 import os
@@ -65,7 +64,7 @@ async def main_process(chat_id, mode, debounce_flag=True, force_reply=None):
     if image_urls:
         understood_contents = []
         for url in image_urls:
-            result = await meme_processor.understand_from_url(url, llm)
+            result = await meme_processor.understand_from_url(url)
             understood_contents.append(result)
 
         combined_text = modified_text
@@ -253,20 +252,19 @@ if __name__ == "__main__":
         sender = MessageSender(connector)
         # 实例化CQ码处理器
         parser = CQCodeParser(connector)
+        
         # 实例化表情处理器
         meme_processor = MemeProcessor()
         # 实例化Yuki状态
         yuki = YukiState()
-        # 实例化LLM请求器
-        llm = ApiCall(cfg.LLM_API_KEY, cfg.LLM_BASE_URL)
         # 实例化历史记录管理器
         history_manager = HistoryManager()
         logger.info("[System] 开始初始化记忆系统（RAG）...")
         from modules.memory.rag import MemoryRAG
         # 初始化向量记忆库
         memory_rag = MemoryRAG()
-        # 实例化Yuki主引擎
-        engine = YukiEngine(llm, memory_rag, history_manager, yuki, sender)
+        # 实例化Yuki主引擎（内部自动从 ProviderRegistry 获取 default provider）
+        engine = YukiEngine(memory_rag, history_manager, yuki, sender)
         engine.process_callback = main_process
         # 在 engine = YukiEngine(...) 之后
         success = False

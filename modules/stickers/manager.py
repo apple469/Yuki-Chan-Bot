@@ -15,7 +15,6 @@ from sentence_transformers import SentenceTransformer
 
 from config import cfg
 from modules.vision.processor import MemeProcessor
-from network.api_request import ApiCall
 from utils.logger import get_logger
 
 logger = get_logger("stickers")
@@ -45,9 +44,10 @@ Yuki的回复内容：{yuki_message}
 
 
 class StickerManager:
-    def __init__(self, llm: ApiCall):
-        self.llm = llm
-        self.vl_processor = MemeProcessor()                    # 已支持本地文件
+    def __init__(self):
+        from providers.registry import ProviderRegistry
+        self.registry = ProviderRegistry()
+        self.vl_processor = MemeProcessor()
         self.model = SentenceTransformer(cfg.EMBED_MODEL)
 
         self.client = chromadb.PersistentClient(path=cfg.VECTOR_DB_PATH)
@@ -86,7 +86,7 @@ class StickerManager:
 
             # --- 路径处理完毕，后续逻辑 ---
             # 1. 调用 processor 获取描述 (保持原签名返回 str)
-            description = await self.vl_processor.understand_from_url(image_ref, self.llm)
+            description = await self.vl_processor.understand_from_url(image_ref)
 
             # 2. 调用修改后的 processor 保存逻辑获取唯一本地路径
             # 因为 _save_to_local_sticker_library 现在有了 exists 判断，这里不会重复写文件
@@ -105,10 +105,8 @@ class StickerManager:
         try:
             # --- 1. 更加鲁棒的路径转换 ---
             if image_ref.startswith("file:///"):
-                # 处理 file:///D:/... 这种情况
                 local_path = image_ref[8:]
             elif image_ref.startswith("file://"):
-                # 处理 file://D:/... 这种情况
                 local_path = image_ref[7:]
             else:
                 local_path = image_ref
@@ -142,9 +140,10 @@ class StickerManager:
                 }
             ]
 
-            raw = await self.llm.robust_api_call(
-                model="qwen3-vl-flash",
+            provider = self.registry.get("vision")
+            raw = await provider.chat(
                 messages=messages,
+                model=cfg.VISION_MODEL,
                 temperature=0.3,
                 max_tokens=400
             )
@@ -159,9 +158,7 @@ class StickerManager:
             return json.loads(cleaned)
 
         except Exception as e:
-            # 这里打印出 local_path 方便你调试
             logger.error(f"[Sticker] Base64 结构化分析失败: {e}")
-            # 如果是因为 json.loads 失败，记录一下 raw 内容
             return {"description": "识别失败", "emotion": "中性", "tags": [], "category": "日常摸鱼系"}
 
     def _build_embed_text(self, analysis: Dict) -> str:
@@ -177,14 +174,16 @@ class StickerManager:
         return self.model.encode(text).tolist()
 
     async def _judge_emotion(self, yuki_message: str) -> str:
-        # （保持不变）
         prompt = EMOTION_JUDGE_PROMPT.format(yuki_message=yuki_message)
-        raw = await self.llm.robust_api_call(
-            model="deepseek-v3.2",
+
+        provider = self.registry.get("default")
+        raw = await provider.chat(
             messages=[{"role": "user", "content": prompt}],
+            model=cfg.LLM_MODEL,
             temperature=0.0,
             max_tokens=20
         )
+
         return raw.strip() or "中性"
 
     # ====================== 主流程 ======================
@@ -196,7 +195,7 @@ class StickerManager:
         vl_desc, local_file_ref = await self._vl_understand_and_localize(image_ref)
 
         # Step 2: 结构化分析（看图）
-        analysis = await self._structured_analysis(local_file_ref)   # 传本地图像
+        analysis = await self._structured_analysis(local_file_ref)
 
         # Step 3~5: 构建嵌入 + 存入
         embed_text = self._build_embed_text(analysis)
@@ -213,7 +212,7 @@ class StickerManager:
             "usage_scenarios": json.dumps(analysis.get("usage_scenarios", []), ensure_ascii=False),
             "use_count": 0,
             "approval_score": 1.0,
-            "image_ref": local_file_ref,      # ← 关键：永远是 file:// 本地路径，可直接发送
+            "image_ref": local_file_ref,
             "last_used": 0
         }
 
@@ -258,7 +257,6 @@ class StickerManager:
             return None
 
         best = ranked[0]
-        # 更新使用统计
         self._increment_use_count(best["id"])
 
         logger.info(f"[Sticker] 选中表情 → 情绪:{best['emotion']} | 描述:{best['description'][:40]} | use_count:{best['use_count']}")
@@ -292,7 +290,6 @@ class StickerManager:
 
         # 关键词池（jieba全局打捞）
         keywords = jieba.analyse.extract_tags(query_text, topK=12)
-        # 简单关键词匹配加分
         for cand in candidates:
             matched = sum(1 for kw in keywords if kw in (cand.get("embed_text", "") + " " + str(cand.get("tags", ""))))
             cand["score_keyword"] = matched * 0.3
@@ -308,12 +305,11 @@ class StickerManager:
         for cand in candidates:
             vector_w = cand.get("score_vector", 0.0)
             keyword_w = cand.get("score_keyword", 0.0)
-            use_bonus = min(cand.get("use_count", 0) / 20.0, 1.0) * 0.4   # 高频有奖励
+            use_bonus = min(cand.get("use_count", 0) / 20.0, 1.0) * 0.4
             approval = cand.get("approval_score", 1.0)
 
             cand["final_score"] = (vector_w * 0.55) + (keyword_w * 0.25) + (use_bonus * 0.15) + (approval * 0.05)
 
-        # 排序
         candidates.sort(key=lambda x: x["final_score"], reverse=True)
 
         # 探索机制：有一定概率把低频包提到前面
@@ -322,18 +318,16 @@ class StickerManager:
             if low_freq and len(low_freq) > 0:
                 import random
                 if random.random() < explore_rate:
-                    # 把一个低频包随机提到前3位
                     explore_item = random.choice(low_freq)
                     candidates.remove(explore_item)
                     insert_pos = random.randint(0, min(2, len(candidates) - 1))
                     candidates.insert(insert_pos, explore_item)
 
-        return candidates[:8]   # 返回Top8供最终决策
+        return candidates[:8]
 
     def _increment_use_count(self, doc_id: str):
         """工具8：更新使用次数（原子化）"""
         try:
-            # Chroma目前不支持直接原子更新，这里用get + update
             res = self.collection.get(ids=[doc_id], include=["metadatas"])
             if res["metadatas"] and len(res["metadatas"]) > 0:
                 meta = res["metadatas"][0]
@@ -353,4 +347,4 @@ class StickerManager:
         """批量导入（慢慢打样时使用）"""
         for ref in image_refs:
             await self.ingest_sticker(ref, chat_id, owner)
-            await asyncio.sleep(0.5)  # 避免API限流
+            await asyncio.sleep(0.5)

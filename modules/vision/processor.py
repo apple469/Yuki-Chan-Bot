@@ -14,10 +14,13 @@ from utils.logger import get_logger
 
 logger = get_logger("vision_processor")
 
+
 class MemeProcessor:
     def __init__(self):
+        from providers.registry import ProviderRegistry
         self.cache = MemeCache()
         self.semaphore = asyncio.Semaphore(cfg.MAX_CONCURRENT_MEME)
+        self._registry = ProviderRegistry()
 
     @staticmethod
     def get_image_hash(image_data):
@@ -44,8 +47,8 @@ class MemeProcessor:
             logger.error(f"压缩失败: {e}")
             return None
 
-    @staticmethod  # 加上这个装饰器 # 修改这个函数，加上 self 参数
-    def is_retryable_error(exception):  # 加上 self
+    @staticmethod
+    def is_retryable_error(exception):
         if isinstance(exception, asyncio.TimeoutError):
             return True
         if isinstance(exception, aiohttp.ClientError):
@@ -54,32 +57,42 @@ class MemeProcessor:
             return True
         return False
 
-    # 然后修改 @retry 的调用方式
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=2, min=4, max=60),
-        retry=retry_if_exception(lambda e: MemeProcessor.is_retryable_error(e)),  # 这里也要改
+        retry=retry_if_exception(lambda e: MemeProcessor.is_retryable_error(e)),
         reraise=True
     )
     async def call_api(self, b64_data):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}},
+                    {"type": "text", "text": VISION_PROMPT}
+                ]
+            }
+        ]
+
+        # 优先使用注册中心的 vision provider（更具扩展性）
+        if self._registry and self._registry.has("vision"):
+            provider = self._registry.get("vision")
+            return await provider.chat(
+                messages=messages,
+                model=cfg.VISION_MODEL,
+                max_tokens=50,
+                temperature=0.75
+            )
+
+        # 兼容降级：直接走原始 HTTP 请求
         logger.debug(f"token:{cfg.IMAGE_PROCESS_API_KEY}, url:{cfg.IMAGE_PROCESS_API_URL}")
         headers = {
             "Authorization": f"Bearer {cfg.IMAGE_PROCESS_API_KEY}",
             "Content-Type": "application/json"
         }
-        #Qwen/Qwen3-VL-8B-Instruct
         payload = {
             "model": cfg.VISION_MODEL,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}},
-                        {"type": "text",
-                         "text": VISION_PROMPT}
-                    ]
-                }
-            ],
+            "messages": messages,
             "max_tokens": 50,
             "temperature": 0.75
         }
@@ -91,7 +104,7 @@ class MemeProcessor:
                     return result["choices"][0]["message"]["content"]
                 else:
                     text = await resp.text()
-                    logger.debug(f"[DEBUG] 错误响应: {text}")  # 看看具体错误
+                    logger.debug(f"[DEBUG] 错误响应: {text}")
                     logger.error(f"API 返回错误 {resp.status}: {text[:200]}")
                     raise aiohttp.ClientResponseError(
                         request_info=resp.request_info,
@@ -100,19 +113,11 @@ class MemeProcessor:
                         message=text
                     )
 
-    async def understand_from_url(self, img_url, llm):
-
+    async def understand_from_url(self, img_url):
         if not cfg.VISION_MODEL:
             logger.info("未设置视觉模型，跳过图像识别")
-            # 如果没有配置视觉模型，直接返回占位符，不进行下载和API调用
             return "[未知动画表情]"
 
-        # 1. 熔断拦截
-        llm.check_auto_recovery()
-        if llm.is_degraded:
-            return "[未知动画表情]"
-
-        # 2. 缓存处理
         img_url = img_url.replace("&amp;", "&")
         cache_key = f"url:{img_url}"
 
@@ -132,7 +137,6 @@ class MemeProcessor:
 
             img_hash = self.get_image_hash(content)
 
-            # 检查哈希缓存
             cached = self.cache.get(img_hash)
             if cached:
                 logger.info(f"[MemeCache] 命中哈希缓存: {cached}")
@@ -150,7 +154,6 @@ class MemeProcessor:
             logger.info(f"[Meme Understanding] 识别结果: {analysis}")
             clean_analysis = analysis.strip().replace('\n', ' ').replace('\r', '')
 
-            # 保存到缓存
             self.cache.set(img_hash, clean_analysis)
             self.cache.set(cache_key, clean_analysis)
             self.cache.save()
@@ -176,7 +179,6 @@ class MemeProcessor:
         urls = re.findall(pattern, text)
         return modified_text, urls
 
-    # 新增：对外暴露的统计方法
     def get_cache_stats(self):
         """获取缓存统计报告"""
         return self.cache.get_stats_report()

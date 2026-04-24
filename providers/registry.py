@@ -1,0 +1,140 @@
+from typing import Dict, Optional
+
+from config import cfg
+from providers.base import BaseProvider
+from providers.fallback import FallbackProvider
+from providers.openai_compatible import OpenAICompatibleProvider
+from utils.logger import get_logger
+
+logger = get_logger("provider.registry")
+
+
+def _get_provider_class_and_url(platform: str):
+    """根据平台名称返回 (Provider类, 默认base_url)。"""
+    p = (platform or "").lower().strip()
+    if p == "deepseek":
+        from providers.deepseek import DeepSeekProvider
+        return DeepSeekProvider, DeepSeekProvider.DEFAULT_BASE_URL
+    if p == "ytea":
+        from providers.ytea import YteaProvider
+        return YteaProvider, YteaProvider.DEFAULT_BASE_URL
+    if p in ("dashscope", "aliyun"):
+        from providers.dashscope import DashScopeProvider
+        return DashScopeProvider, DashScopeProvider.DEFAULT_BASE_URL
+    if p == "openai":
+        return OpenAICompatibleProvider, "https://api.openai.com/v1"
+    # 未知平台回退到通用 OpenAI 兼容
+    return OpenAICompatibleProvider, ""
+
+
+class ProviderRegistry:
+    """
+    Provider 注册中心（单例）。
+    负责管理所有模型 Provider 的生命周期与路由，支持从 config 自动构建默认 Provider。
+    框架内部自动初始化，用户无需感知其存在。
+    """
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._providers: Dict[str, BaseProvider] = {}
+            cls._instance._build_defaults()
+        return cls._instance
+
+    def _create_provider(
+        self,
+        name: str,
+        platform: str,
+        api_key: str,
+        override_url: Optional[str] = None,
+        default_model: Optional[str] = None,
+        timeout: float = 60.0,
+    ):
+        """工厂方法：根据平台名称创建对应 Provider，支持 URL 覆盖。"""
+        provider_cls, builtin_url = _get_provider_class_and_url(platform)
+        base_url = override_url or builtin_url
+        return provider_cls(
+            name=name,
+            base_url=base_url,
+            api_key=api_key,
+            default_model=default_model,
+            timeout=timeout,
+        )
+
+    def _build_defaults(self):
+        """基于现有 config 自动构建默认 Provider。"""
+        # --- 默认文本对话 Provider（主备切换）---
+        primary = self._create_provider(
+            name="primary",
+            platform=cfg.LLM_PLATFORM,
+            api_key=cfg.LLM_API_KEY,
+            override_url=cfg.LLM_BASE_URL or None,
+            default_model=cfg.LLM_MODEL,
+        )
+        # 若备用 API Key 为空且平台与首选一致，自动复用首选 Key
+        backup_key = cfg.BACKUP_API_KEY
+        if not backup_key and cfg.BACKUP_PLATFORM == cfg.LLM_PLATFORM:
+            backup_key = cfg.LLM_API_KEY
+
+        backup = self._create_provider(
+            name="backup",
+            platform=cfg.BACKUP_PLATFORM,
+            api_key=backup_key,
+            override_url=cfg.BACKUP_BASE_URL or None,
+            default_model=cfg.BACKUP_MODEL,
+        )
+        default_fallback = FallbackProvider(
+            name="default",
+            primary=primary,
+            backup=backup,
+            fallback_message=(
+                f"（{cfg.ROBOT_NAME.title()} 好像有点不舒服，"
+                f"暂时连接不上大脑...{cfg.MASTER_NAME}等会再找我好吗？）"
+            ),
+        )
+        self.register("default", default_fallback)
+
+        # --- Vision Provider ---
+        if cfg.VISION_MODEL and cfg.IMAGE_PROCESS_API_KEY:
+            vision = self._create_provider(
+                name="vision",
+                platform=cfg.VISION_PLATFORM,
+                api_key=cfg.IMAGE_PROCESS_API_KEY,
+                override_url=cfg.IMAGE_PROCESS_API_URL or None,
+                default_model=cfg.VISION_MODEL,
+                timeout=40.0,
+            )
+            self.register("vision", vision)
+
+        logger.info("[ProviderRegistry] 默认 Provider 初始化完成")
+
+    def register(self, name: str, provider: BaseProvider) -> None:
+        """注册一个 Provider。"""
+        self._providers[name] = provider
+        logger.info(
+            f"[ProviderRegistry] 注册 Provider: {name} -> {provider.__class__.__name__}"
+        )
+
+    def get(self, name: str = "default") -> BaseProvider:
+        """按名称获取 Provider。"""
+        provider = self._providers.get(name)
+        if provider is None:
+            available = ", ".join(self._providers.keys())
+            raise KeyError(f"未找到 Provider '{name}'，可用: {available}")
+        return provider
+
+    def has(self, name: str) -> bool:
+        """检查是否已注册指定 Provider。"""
+        return name in self._providers
+
+    async def close_all(self) -> None:
+        """关闭所有 Provider 并清理全局 Session。"""
+        for name, provider in list(self._providers.items()):
+            try:
+                await provider.close()
+                logger.info(f"[ProviderRegistry] 已关闭 Provider: {name}")
+            except Exception as e:
+                logger.error(f"[ProviderRegistry] 关闭 Provider {name} 失败: {e}")
+        await OpenAICompatibleProvider.close_global_session()
