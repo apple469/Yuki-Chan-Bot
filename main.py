@@ -276,6 +276,7 @@ if __name__ == "__main__":
                 server_name="127.0.0.1",
                 server_port=1314,
                 prevent_thread_lock=True,
+                quiet=True,
                 theme=webui._ui_theme,
                 css=webui._ui_css
             )

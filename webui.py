@@ -184,4 +184,4 @@ if __name__ == "__main__":
     os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost")
     demo = build_ui()
     # 局域网访问
-    demo.launch(server_name="127.0.0.1", server_port=1314, theme=demo._ui_theme, css=demo._ui_css)
+    demo.launch(server_name="127.0.0.1", server_port=1314, quiet=True, theme=demo._ui_theme, css=demo._ui_css)
