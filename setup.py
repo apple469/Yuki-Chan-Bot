@@ -130,9 +130,21 @@ def migrate_from_env():
     mapping = {
         "LLM_API_KEY": ("api", "llm_api_key"),
         "IMAGE_PROCESS_API_KEY": ("api", "image_process_api_key"),
+        "NAPCAT_WS_URL": ("connection", "napcat_ws_url"),
+        "NAPCAT_WS_TOKEN": ("connection", "napcat_ws_token"),
         "TARGET_QQ": ("target", "qq"),
         "TARGET_GROUPS": ("target", "groups"),
     }
+
+    # 机器人身份（允许覆盖，因为旧版 .env 中通常是用户自定义的）
+    if env_data.get("ROBOT_NAME"):
+        cfg["robot_name"] = env_data["ROBOT_NAME"]
+        print(f"  - [已迁移] ROBOT_NAME -> robot_name")
+        migrated_count += 1
+    if env_data.get("MASTER_NAME"):
+        cfg["master_name"] = env_data["MASTER_NAME"]
+        print(f"  - [已迁移] MASTER_NAME -> master_name")
+        migrated_count += 1
 
     def set_nested(data, path, value):
         curr = data
@@ -212,6 +224,19 @@ def config_yaml(mode):
     cfg = _load_yaml()
     changed = False
 
+    print("\n--- 配置机器人身份 ---")
+    robot_name = input("给 bot 起个名字吧[默认 yuki]: ").strip()
+    if robot_name:
+        cfg["robot_name"] = robot_name
+        changed = True
+        print(f"  ✓ robot_name 已设置为 {robot_name}")
+
+    master_name = input("bot 如何称呼你呢 [默认 主人]: ").strip()
+    if master_name:
+        cfg["master_name"] = master_name
+        changed = True
+        print(f"  ✓ master_name 已设置为 {master_name}")
+
     print("\n--- 配置 API 密钥 ---")
     # 定义需要交互配置的项 (提示语, path)
     prompts = [
@@ -232,6 +257,19 @@ def config_yaml(mode):
             set_nested(cfg, path, val)
             changed = True
             print(f"  ✓ {'.'.join(path)} 已设置")
+
+    print("\n--- 配置 NapCat 连接 ---")
+    ws_url_val = input("请输入 NapCat WebSocket 地址 [默认 ws://localhost:3001]: ").strip()
+    if ws_url_val:
+        set_nested(cfg, ("connection", "napcat_ws_url"), ws_url_val)
+        changed = True
+        print(f"  ✓ connection.napcat_ws_url 已设置为 {ws_url_val}")
+
+    ws_token_val = input("请输入 NapCat WebSocket Token（留空则不认证）: ").strip()
+    if ws_token_val:
+        set_nested(cfg, ("connection", "napcat_ws_token"), ws_token_val)
+        changed = True
+        print("  ✓ connection.napcat_ws_token 已设置")
 
     print("\n--- 配置目标 QQ ---")
     # QQ 号配置逻辑

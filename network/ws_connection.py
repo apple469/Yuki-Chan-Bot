@@ -2,6 +2,7 @@
 import json
 import asyncio
 import websockets
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 from typing import Optional, Dict
 from config import cfg
 from asyncio import Future
@@ -10,12 +11,24 @@ from utils.logger import get_logger
 logger = get_logger("ws_connection")
 
 class BotConnector:
-    def __init__(self, ws_url: str = cfg.NAPCAT_WS_URL):
+    def __init__(self, ws_url: str = cfg.NAPCAT_WS_URL, ws_token: str = None):
         self.ws_url = ws_url
+        self.ws_token = ws_token if ws_token is not None else cfg.NAPCAT_WS_TOKEN
         self.websocket = None
         self._lock = asyncio.Lock()
         # 新增：用于存放等待响应的 Future 对象
         self._response_futures: Dict[str, Future] = {}
+
+    def _get_connection_url(self) -> str:
+        """如有 token，将其作为 access_token 拼接到 URL"""
+        if not self.ws_token:
+            return self.ws_url
+        parsed = urlparse(self.ws_url)
+        query_params = parse_qs(parsed.query)
+        if "access_token" not in query_params:
+            query_params["access_token"] = [self.ws_token]
+        new_query = urlencode(query_params, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
 
     async def ensure_connection(self):
         """最兼容的版本判断：确保返回一个真正 OPEN 的连接"""
@@ -43,8 +56,9 @@ class BotConnector:
                 if self.websocket is not None:
                     logger.warning("[Network] 检测到连接状态异常，正在重建...")
 
+                connect_url = self._get_connection_url()
                 self.websocket = await websockets.connect(
-                    self.ws_url,
+                    connect_url,
                     ping_interval=20,
                     ping_timeout=60,
                     close_timeout=10
