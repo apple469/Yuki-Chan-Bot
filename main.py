@@ -171,13 +171,18 @@ async def napcat_listen(mode):
                     if not cfg.TARGET_GROUPS or group_id in cfg.TARGET_GROUPS:
                         sender_info = data.get("sender", {})
                         name = sender_info.get("card") or sender_info.get("nickname") or "路人"
+                        is_fake = name == cfg.MASTER_NAME and user_id != cfg.TARGET_QQ
+                        if is_fake:
+                            logger.warning(f"[System] 检测到疑似冒充消息，已替换发送者姓名。原始姓名: {name}, QQ: {user_id}")
+                            name = f"{name}(冒充)"
                         # 将消息存入缓冲区并触发主进程
                         await manage_buffer(
                             group_id,
                             f"【“{name}”】说: {raw_msg}",
                             mode,
                             raw_message=raw_msg,
-                            sender_name=name  # 传入姓名用于标识
+                            sender_name=name,  # 传入姓名用于标识
+                            user_id=int(user_id)
                         )
 
         except Exception as e:
@@ -186,7 +191,7 @@ async def napcat_listen(mode):
             logger.info("[System] 5 秒后将尝试重启监听进程...")
             await asyncio.sleep(5)
 
-async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''):
+async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = '',user_id = None):
     global real_time_debounce_time
     cid_str = str(chat_id)
 
@@ -215,10 +220,11 @@ async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''
 
     # 判定是否为机器人（可以根据名称含 BOT，或者特定的 QQ 号判定）
     is_bot = "BOT" in sender_name or "机器人" in sender_name
+    
 
     if chat_id not in yuki.message_buffer:
         yuki.message_buffer[chat_id] = []
-    if not ("BOT" in sender_name):
+    if (not ("BOT" in sender_name)) or (user_id and user_id == 1390249127):  # 允许特定机器人QQ发起对话
         yuki.message_buffer[chat_id].append({
             "name": sender_name,
             "content": content,  # 这是带 【“姓名”】说: 的完整格式
