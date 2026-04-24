@@ -238,7 +238,7 @@ if __name__ == "__main__":
         start_time = time.time()
 
         # 加载与Napcat通信的Websocket服务
-        connector = BotConnector(cfg.NAPCAT_WS_URL)
+        connector = BotConnector(cfg.NAPCAT_WS_URL, cfg.NAPCAT_WS_TOKEN)
         # 实例化消息发送器
         sender = MessageSender(connector)
         # 实例化CQ码处理器
