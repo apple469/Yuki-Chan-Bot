@@ -16,6 +16,16 @@ Yuki 采用 **Provider 模式** 管理所有 AI 模型调用。核心设计：
 
 所有模块通过 `ProviderRegistry()` 获取 Provider，**无需关心底层 HTTP 细节**。
 
+### 配置热重载
+
+Config 中心每秒检测 `configs/config.yaml` 的变更。当 **平台 / API Key / 模型 / URL** 发生变化时：
+
+1. `Config._check()` 检测到差异，记录变更日志
+2. 自动调用 `ProviderRegistry().reload()` 清空并重建所有 Provider
+3. `YukiEngine.provider` 通过 `@property` 实时获取，**无需重启程序**
+
+这意味着修改 `llm_platform` 后，下一次对话立即生效。
+
 ---
 
 ## 内置 Provider
@@ -26,8 +36,9 @@ Yuki 采用 **Provider 模式** 管理所有 AI 模型调用。核心设计：
 | `ytea` | `YteaProvider` | `https://api.ytea.top/v1` | TeaTop 代理 |
 | `dashscope` | `DashScopeProvider` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 阿里云 |
 | `openai` | `OpenAICompatibleProvider` | `https://api.openai.com/v1` | OpenAI 官方 |
+| `custom` | `OpenAICompatibleProvider` | — | 需手动填写 `base_url` |
 
-> 选择平台名称后，**URL 由框架自动提供**，无需手动填写完整地址。
+> 选择非 `custom` 平台后，**URL 由框架自动提供**，`base_url` 字段会被忽略。只有 `custom` 平台会读取你填写的自定义地址。
 
 ---
 
@@ -39,7 +50,7 @@ Yuki 采用 **Provider 模式** 管理所有 AI 模型调用。核心设计：
 api:
   llm_platform: "deepseek"        # 首选平台名称
   llm_api_key: "sk-xxx"           # 对应平台的 API Key
-  llm_base_url: ""                # 可选：仅当需要覆盖内置 URL 时填写
+  llm_base_url: ""                # 仅当 platform 为 "custom" 时生效
 
   backup_platform: "deepseek"     # 备用平台
   backup_api_key: ""              # 空且平台与首选一致时，自动复用 llm_api_key
@@ -153,13 +164,16 @@ api:
 ## 常见问题
 
 **Q：如何切换平台？**  
-A：修改 `config.yaml` 中的 `llm_platform` 即可，URL 由框架自动切换。
+A：修改 `config.yaml` 中的 `llm_platform` 即可，URL 由框架自动切换。**无需重启**，下一次对话生效。
 
 **Q：自定义代理地址（如本地 OneAPI）？**  
-A：选择 `llm_platform: "openai"`，然后在 `llm_base_url` 中填写你的代理地址。
+A：将 `llm_platform` 设为 `"custom"`，然后在 `llm_base_url` 中填写你的代理地址。非 `custom` 平台填写的 `base_url` 会被忽略。
 
 **Q：备用 Key 为空时会怎样？**  
 A：若 `backup_platform` 与 `llm_platform` 相同，且 `backup_api_key` 为空，框架会自动复用 `llm_api_key`。
 
 **Q：如何关闭 thinking 过滤？**  
 A：在 `config.yaml` 中设置 `model.disable_thinking: false`。
+
+**Q：为什么配置文件中会自动出现新字段？**  
+A：程序启动时会自动将代码中定义的新配置字段补全到内存，**退出时自动写回文件**，确保配置文件始终与代码定义保持同步。
