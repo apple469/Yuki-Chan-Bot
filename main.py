@@ -1,6 +1,7 @@
 # main.py
 # by: Eganchiyu
 import asyncio
+import re
 import time
 import datetime
 import sys
@@ -113,13 +114,14 @@ async def main_process(chat_id, mode, debounce_flag=True, force_reply=None):
 
     logger.info(f"检索完成，用时 {(time.time()-first_time):.2f}")
 
-    Yuki_Answer = await engine.api_reply(chat_id, combined_text, history_dict, mode, relevant_diaries)
+    Yuki_Answer,voice = await engine.api_reply(chat_id, combined_text, history_dict, mode, relevant_diaries)
 
     logger.info(f"{cfg.ROBOT_NAME.title()}打字完成！")
     if mode == "group":
         yuki.consume_energy(chat_id)
     logger.info(f"[System] {cfg.ROBOT_NAME.title()} 正在发送消息...(剩余精力: {yuki.energy[chat_id]:.1f})")
-    await sender.send(chat_id, Yuki_Answer, mode=mode)
+    if not voice: await sender.send(chat_id, Yuki_Answer, mode=mode)
+    else: await sender.send(chat_id, voice, mode=mode)
     logger.info(f"[System] 发送完成！内容：{Yuki_Answer}")
     logger.info(f"[System] {cfg.ROBOT_NAME.title()}正在保存上下文...")
     # 保存回复到上下文
