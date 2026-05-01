@@ -271,7 +271,7 @@ async def manage_buffer(chat_id, content, mode, raw_message='', sender_name = ''
 
     if chat_id not in yuki.message_buffer:
         yuki.message_buffer[chat_id] = []
-    if (not ("BOT" in sender_name)) or (user_id and user_id == 1390249127):  # 允许特定机器人QQ发起对话
+    if (not ("BOT" in sender_name)):
         yuki.message_buffer[chat_id].append({
             "name": sender_name,
             "content": content,  # 这是带 【“姓名”】说: 的完整格式
